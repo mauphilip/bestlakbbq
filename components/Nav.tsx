@@ -12,24 +12,37 @@ const links = [
 export default function Nav() {
   const pathname = usePathname();
   return (
-    <header className="border-b border-border/50 bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-      <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-8">
-        <Link href="/" className="font-bold text-lg tracking-tight">
-          <span className="text-primary">🔥</span> Best LA KBBQ
+    <header className="fixed top-0 left-0 right-0 z-50 h-14 flex items-center">
+      {/* Blur backdrop */}
+      <div className="absolute inset-0 bg-background/70 backdrop-blur-xl border-b border-white/5" />
+
+      <div className="relative max-w-6xl mx-auto px-6 w-full flex items-center justify-between">
+        {/* Wordmark */}
+        <Link href="/" className="flex items-center gap-2 group">
+          <span className="text-xl">🔥</span>
+          <span className="font-bold text-base tracking-tight">
+            <span className="text-primary">Best</span>
+            <span className="text-foreground/90"> LA KBBQ</span>
+          </span>
         </Link>
-        <nav className="flex items-center gap-1">
+
+        {/* Nav links */}
+        <nav className="flex items-center gap-0.5">
           {links.map(({ href, label }) => (
             <Link
               key={href}
               href={href}
               className={cn(
-                "px-3 py-1.5 rounded-md text-sm transition-colors",
+                "relative px-3.5 py-1.5 rounded-lg text-sm transition-all duration-150",
                 pathname === href
-                  ? "bg-primary/15 text-primary font-medium"
-                  : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                  ? "text-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
-              {label}
+              {pathname === href && (
+                <span className="absolute inset-0 rounded-lg bg-white/8" />
+              )}
+              <span className="relative">{label}</span>
             </Link>
           ))}
         </nav>

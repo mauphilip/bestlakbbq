@@ -20,9 +20,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geist.variable} h-full`}>
-      <body className="min-h-full flex flex-col bg-background text-foreground antialiased">
+      <body className="min-h-full bg-background text-foreground antialiased grain">
         <Nav />
-        <main className="flex-1">{children}</main>
+        <main>{children}</main>
       </body>
     </html>
   );
