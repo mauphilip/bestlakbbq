@@ -40,7 +40,6 @@ export default function RestaurantForm({ initial, token, onClose, onSaved }: Pro
   const [priceTier, setPriceTier] = useState<PriceTier>(initial?.price_tier ?? "$$$");
   const [priceVerified, setPriceVerified] = useState(initial?.price_verified ?? false);
   const [yelpRating, setYelpRating] = useState(initial?.yelp_rating ?? 4.0);
-  const [googleRating, setGoogleRating] = useState(initial?.google_rating ?? 4.0);
   const [reviewCount, setReviewCount] = useState(initial?.review_count ?? 100);
   const [yelpUrl, setYelpUrl] = useState(initial?.yelp_url ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
@@ -98,7 +97,7 @@ export default function RestaurantForm({ initial, token, onClose, onSaved }: Pro
       price_tier: priceTier,
       price_verified: priceVerified,
       yelp_rating: yelpRating,
-      google_rating: googleRating,
+      google_rating: 0,
       review_count: reviewCount,
       last_price_check: priceVerified ? new Date().toISOString().slice(0, 10) : (initial?.last_price_check ?? "2022-02-01"),
       last_yelp_sync: initial?.last_yelp_sync,
@@ -291,17 +290,11 @@ export default function RestaurantForm({ initial, token, onClose, onSaved }: Pro
           </div>
 
           {/* Ratings */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-sm font-medium block mb-1.5">Yelp ★</label>
               <input type="number" step="0.1" min="1" max="5" value={yelpRating}
                 onChange={(e) => setYelpRating(Number(e.target.value))}
-                className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
-            </div>
-            <div>
-              <label className="text-sm font-medium block mb-1.5">Google ★</label>
-              <input type="number" step="0.1" min="1" max="5" value={googleRating}
-                onChange={(e) => setGoogleRating(Number(e.target.value))}
                 className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
             </div>
             <div>
