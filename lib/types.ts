@@ -20,6 +20,16 @@ export interface Restaurant {
   notes: string;
 }
 
+export interface Visit {
+  restaurantId: string;
+  visited: boolean;
+  visitDate?: string;        // YYYY-MM-DD
+  personalRating?: number;   // 1–5
+  wouldGoBack?: boolean;
+  notes?: string;
+  updatedAt?: string;
+}
+
 export interface CalculatorItem {
   id: string;
   name: string;

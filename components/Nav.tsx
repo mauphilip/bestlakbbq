@@ -10,6 +10,7 @@ const links = [
   { href: "/", label: "Chart" },
   { href: "/list", label: "Directory" },
   { href: "/calculator", label: "Beat the Restaurant" },
+  { href: "/visited", label: "My Visits" },
 ];
 
 export default function Nav() {
