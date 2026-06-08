@@ -1,0 +1,82 @@
+[
+  {
+    "id": "beef-brisket",
+    "name": "Beef Brisket (Chadolbaegi)",
+    "category": "beef",
+    "costco_price_per_lb": 8.99,
+    "hmart_price_per_lb": 10.99,
+    "updated_at": "2026-06-01"
+  },
+  {
+    "id": "beef-short-rib",
+    "name": "Beef Short Rib (Galbi)",
+    "category": "beef",
+    "costco_price_per_lb": 12.99,
+    "hmart_price_per_lb": 15.99,
+    "updated_at": "2026-06-01"
+  },
+  {
+    "id": "ribeye",
+    "name": "Ribeye",
+    "category": "beef",
+    "costco_price_per_lb": 16.99,
+    "hmart_price_per_lb": 19.99,
+    "updated_at": "2026-06-01"
+  },
+  {
+    "id": "pork-belly",
+    "name": "Pork Belly (Samgyeopsal)",
+    "category": "pork",
+    "costco_price_per_lb": 4.99,
+    "hmart_price_per_lb": 6.49,
+    "updated_at": "2026-06-01"
+  },
+  {
+    "id": "pork-jowl",
+    "name": "Pork Jowl (Hang Jeong Sal)",
+    "category": "pork",
+    "costco_price_per_lb": 5.49,
+    "hmart_price_per_lb": 7.99,
+    "updated_at": "2026-06-01"
+  },
+  {
+    "id": "pork-shoulder",
+    "name": "Pork Shoulder (Moksal)",
+    "category": "pork",
+    "costco_price_per_lb": 3.99,
+    "hmart_price_per_lb": 5.99,
+    "updated_at": "2026-06-01"
+  },
+  {
+    "id": "chicken-thigh",
+    "name": "Chicken Thigh (Dak Galbi)",
+    "category": "chicken",
+    "costco_price_per_lb": 2.99,
+    "hmart_price_per_lb": 4.49,
+    "updated_at": "2026-06-01"
+  },
+  {
+    "id": "beef-tongue",
+    "name": "Beef Tongue (Hyeo)",
+    "category": "beef",
+    "costco_price_per_lb": 11.99,
+    "hmart_price_per_lb": 14.99,
+    "updated_at": "2026-06-01"
+  },
+  {
+    "id": "beef-bulgogi",
+    "name": "Marinated Beef Bulgogi",
+    "category": "beef",
+    "costco_price_per_lb": 9.99,
+    "hmart_price_per_lb": 12.49,
+    "updated_at": "2026-06-01"
+  },
+  {
+    "id": "spicy-pork",
+    "name": "Spicy Marinated Pork",
+    "category": "pork",
+    "costco_price_per_lb": 4.49,
+    "hmart_price_per_lb": 6.99,
+    "updated_at": "2026-06-01"
+  }
+]
