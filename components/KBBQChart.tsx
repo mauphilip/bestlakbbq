@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
@@ -9,6 +9,9 @@ import { Maximize2, Minimize2, Tag, EyeOff, Search, X } from "lucide-react";
 import type { Restaurant } from "@/lib/types";
 
 type Props = { restaurants: Restaurant[] };
+
+/** Restaurants above this cost are shown in a separate "Price Outliers" panel */
+const OUTLIER_THRESHOLD = 60;
 
 interface ChartPoint {
   x: number; // rating
@@ -157,7 +160,7 @@ function ChartInner({
         <YAxis
           dataKey="y"
           type="number"
-          domain={[15, 85]}
+          domain={[15, OUTLIER_THRESHOLD]}
           name="Cost per person"
           label={{ value: "↑ Cost / person ($)", angle: -90, position: "insideLeft", offset: 14, fill: tickFill, fontSize: 11 }}
           tick={{ fill: tickFill, fontSize: 10 }}
@@ -213,7 +216,7 @@ export default function KBBQChart({ restaurants }: Props) {
 
   const maxReviews = useMemo(() => Math.max(...restaurants.map((r) => r.review_count), 1), [restaurants]);
 
-  const data: ChartPoint[] = useMemo(() => {
+  const allPoints: ChartPoint[] = useMemo(() => {
     const q = search.trim().toLowerCase();
     return filtered.map((r) => {
       const cost = r.ayce
@@ -227,6 +230,10 @@ export default function KBBQChart({ restaurants }: Props) {
       return { x: rating, y: cost, r: bubbleR, restaurant: r, isAyce: r.ayce, color, opacity };
     });
   }, [filtered, search, maxReviews]);
+
+  // Split into main chart data and price outliers (shown separately)
+  const data = allPoints.filter((d) => d.y <= OUTLIER_THRESHOLD);
+  const outliers = allPoints.filter((d) => d.y > OUTLIER_THRESHOLD);
 
   const avgRating = data.length ? data.reduce((s, d) => s + d.x, 0) / data.length : 4.1;
   const avgCost = data.length ? data.reduce((s, d) => s + d.y, 0) / data.length : 35;
@@ -314,6 +321,33 @@ export default function KBBQChart({ restaurants }: Props) {
       <div className="w-full h-[500px] bg-card/50 rounded-xl border border-border p-3">
         {chartContent}
       </div>
+
+      {/* Price outliers panel */}
+      {outliers.length > 0 && (
+        <div className="bg-card/50 border border-border rounded-xl p-3">
+          <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#991b1b] inline-block" />
+            Price Outliers (${OUTLIER_THRESHOLD}+/pp) — not shown on chart
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {outliers.map((d) => (
+              <div key={d.restaurant.id} className="flex items-center gap-2 text-xs bg-secondary rounded-lg px-2.5 py-1.5">
+                {d.isAyce
+                  ? <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ background: d.color }} />
+                  : <svg width="8" height="8" viewBox="0 0 10 10" className="shrink-0"><polygon points="5,0 10,10 0,10" fill={d.color} /></svg>
+                }
+                <span className="font-medium">{d.restaurant.name}</span>
+                <span className="text-muted-foreground">${d.y}/pp</span>
+                <span className="text-muted-foreground">★ {d.x.toFixed(2)}</span>
+                {d.restaurant.yelp_url && (
+                  <a href={d.restaurant.yelp_url} target="_blank" rel="noopener noreferrer"
+                    className="text-primary hover:underline">Yelp →</a>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Quadrant labels */}
       <div className="grid grid-cols-2 gap-2 text-xs">
