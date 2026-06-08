@@ -15,7 +15,7 @@ function getMinCost(r: Restaurant): number {
 }
 
 function getAvgRating(r: Restaurant): number {
-  return (r.yelp_rating + r.google_rating) / 2;
+  return r.yelp_rating;
 }
 
 function getValueScore(r: Restaurant): number {
@@ -117,7 +117,7 @@ export default function RestaurantList({ restaurants }: { restaurants: Restauran
           const avgRating = getAvgRating(r);
           const valueScore = getValueScore(r);
           const maxValueScore = Math.max(...restaurants.map(getValueScore));
-          const isValuePick = valueScore > maxValueScore * 0.75 && minCost < 35;
+          const isValuePick = valueScore > maxValueScore * 0.75 && minCost <= 40;
           const reviewPct = r.review_count / maxReviews;
 
           return (
@@ -148,7 +148,7 @@ export default function RestaurantList({ restaurants }: { restaurants: Restauran
               </div>
               <div className="text-right">
                 <div className="text-sm font-medium">⭐ {avgRating.toFixed(1)}</div>
-                <div className="text-xs text-muted-foreground">Y:{r.yelp_rating} G:{r.google_rating}</div>
+                <div className="text-xs text-muted-foreground">Yelp</div>
               </div>
               <div className="w-16">
                 <div className="text-xs text-muted-foreground mb-1 text-right">{valueScore.toFixed(1)}</div>
@@ -159,7 +159,7 @@ export default function RestaurantList({ restaurants }: { restaurants: Restauran
               <div className="w-14">
                 <div className="text-xs text-muted-foreground mb-1 text-right">{(r.review_count / 1000).toFixed(1)}k</div>
                 <div className="h-1.5 rounded-full bg-border overflow-hidden">
-                  <div className="h-full rounded-full bg-blue-500" style={{ width: `${reviewPct * 100}%` }} />
+                  <div className="h-full rounded-full bg-primary/60" style={{ width: `${reviewPct * 100}%` }} />
                 </div>
               </div>
               <div>

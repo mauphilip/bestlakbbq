@@ -10,7 +10,6 @@ const links = [
   { href: "/", label: "Chart" },
   { href: "/list", label: "Directory" },
   { href: "/calculator", label: "Beat the Restaurant" },
-  { href: "/visited", label: "My Visits" },
 ];
 
 const secretLinks = [
@@ -49,8 +48,8 @@ export default function Nav() {
           <Link href="/" className="flex items-center gap-2.5 shrink-0">
             <span className="text-2xl leading-none">🔥</span>
             <span className="font-bold text-lg tracking-tight">
-              <span className="text-primary">Best</span>
-              <span className="text-foreground"> LA KBBQ</span>
+              <span className="text-primary">SoCal</span>
+              <span className="text-foreground"> KBBQ</span>
             </span>
           </Link>
 

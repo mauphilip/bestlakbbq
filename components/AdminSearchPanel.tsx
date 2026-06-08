@@ -68,6 +68,7 @@ interface Props {
 
 export default function AdminSearchPanel({ token, onAdded }: Props) {
   const [query, setQuery] = useState("");
+  const [location, setLocation] = useState("Los Angeles, CA");
   const [results, setResults] = useState<YelpBusiness[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -80,8 +81,8 @@ export default function AdminSearchPanel({ token, onAdded }: Props) {
     try {
       const params = new URLSearchParams({
         path: "/businesses/search",
-        term: query + " Korean BBQ",
-        location: "Los Angeles, CA",
+        term: query,
+        location: location.trim() || "Los Angeles, CA",
         limit: "10",
       });
       const res = await fetch(`/api/yelp?${params}`);
@@ -96,21 +97,28 @@ export default function AdminSearchPanel({ token, onAdded }: Props) {
   return (
     <div className="space-y-4">
       {/* Search input */}
-      <div className="flex gap-2">
-        <div className="relative flex-1">
+      <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+        <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && search()}
-            placeholder="Search Yelp for a restaurant…"
+            placeholder="Restaurant name…"
             className="w-full pl-9 pr-4 py-2 bg-secondary border border-border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
+        <input
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && search()}
+          placeholder="Location (e.g. Koreatown, CA)"
+          className="w-full sm:w-48 px-3 py-2 bg-secondary border border-border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+        />
         <button
           onClick={search}
           disabled={loading}
-          className="px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+          className="px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 shrink-0"
         >
           {loading ? "Searching…" : "Search"}
         </button>

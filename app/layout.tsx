@@ -10,8 +10,8 @@ const geist = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Best LA KBBQ",
-  description: "Find the best Korean BBQ in Los Angeles — ranked by cost, value, and popularity.",
+  title: "LA KBBQ",
+  description: "Find Korean BBQ in Los Angeles — ranked by cost, value, and popularity.",
 };
 
 export default function RootLayout({
@@ -20,11 +20,19 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geist.variable} h-full dark`}>
+    <html lang="en" className={`${geist.variable} h-full`}>
+      <head>
+        {/* Inline script: reads localStorage before first paint to avoid flash */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t)){document.documentElement.classList.add('dark');}}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className="min-h-full bg-background text-foreground antialiased grain">
         <ThemeProvider>
           <Nav />
-          <main>{children}</main>
+          <main className="pt-16">{children}</main>
         </ThemeProvider>
       </body>
     </html>

@@ -4,7 +4,7 @@ export function proxy(req: NextRequest) {
   const host = req.headers.get("host") ?? "";
   const { pathname } = req.nextUrl;
 
-  // bestlakbbq.com → 301 redirect to socalkbbq.com
+  // bestlakbbq.com (apex + www) → 301 redirect to socalkbbq.com
   if (host.includes("bestlakbbq.com")) {
     const url = `https://socalkbbq.com${pathname}`;
     return NextResponse.redirect(url, 301);

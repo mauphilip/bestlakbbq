@@ -17,12 +17,12 @@ export default function AboutCard({ restaurants }: { restaurants: Restaurant[] }
           </h2>
           <ul className="space-y-3 text-sm">
             {[
-              { icon: "→", label: "X-axis", desc: "Cost per person — AYCE uses lowest tier price; Non-AYCE is an estimated per-person spend for a typical group." },
-              { icon: "↑", label: "Y-axis", desc: "Popularity — the average of Yelp and Google star ratings." },
-              { icon: "⬤", label: "Bubble size", desc: "Total review count. Bigger bubble = more reviews = stronger signal." },
-              { icon: "🟠", label: "Orange circles", desc: "All-you-can-eat (AYCE) restaurants." },
-              { icon: "🔵", label: "Blue triangles", desc: "Non-AYCE restaurants (à la carte pricing)." },
-              { icon: "╌", label: "Dashed lines", desc: "Average cost and average rating. Top-left quadrant = best value." },
+              { icon: "→", label: "X-axis (horizontal)", desc: "Yelp rating — higher is better." },
+              { icon: "↑", label: "Y-axis (vertical)", desc: "Cost per person — AYCE uses the entry-level tier price; Non-AYCE is an estimated spend for a typical group order." },
+              { icon: "⬤", label: "Bubble size", desc: "Review count from Yelp. Bigger = more reviews = stronger signal." },
+              { icon: "●", label: "Circles", desc: "All-you-can-eat (AYCE) restaurants." },
+              { icon: "▲", label: "Triangles", desc: "Non-AYCE restaurants (set menu or à la carte)." },
+              { icon: "—", label: "Reference lines", desc: "Average cost and average rating. Bottom-right quadrant = best value." },
             ].map(({ icon, label, desc }) => (
               <li key={label} className="flex gap-3">
                 <span className="shrink-0 w-5 text-center text-muted-foreground">{icon}</span>
@@ -32,6 +32,27 @@ export default function AboutCard({ restaurants }: { restaurants: Restaurant[] }
                 </span>
               </li>
             ))}
+            {/* Color gradient */}
+            <li className="flex gap-3">
+              <span className="shrink-0 w-5 text-center text-muted-foreground">🎨</span>
+              <span className="text-muted-foreground">
+                <span className="font-medium text-foreground">Dot color: </span>cost per person
+                <ul className="mt-1.5 space-y-1">
+                  {[
+                    { color: "#f59e0b", label: "Under $35", sublabel: "budget" },
+                    { color: "#f97316", label: "$35–44", sublabel: "mid-range" },
+                    { color: "#ef4444", label: "$45–59", sublabel: "premium" },
+                    { color: "#991b1b", label: "$60+", sublabel: "high-end" },
+                  ].map(({ color, label, sublabel }) => (
+                    <li key={label} className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full shrink-0" style={{ background: color }} />
+                      <span className="font-medium text-foreground">{label}</span>
+                      <span className="text-muted-foreground/70">— {sublabel}</span>
+                    </li>
+                  ))}
+                </ul>
+              </span>
+            </li>
           </ul>
         </div>
 
@@ -54,7 +75,7 @@ export default function AboutCard({ restaurants }: { restaurants: Restaurant[] }
               by Rajesh Nitityanandan, expanded with additional spots and updated prices.
             </p>
             <p>
-              Prices are verified manually. Ratings are pulled from Yelp and Google at the time of each price check. Non-AYCE per-person costs are estimates based on a typical 2–3 person order divided by party size.
+              Ratings are from Yelp. AYCE prices use the entry-level tier. Non-AYCE costs are estimated from the most common set or a typical 2–3 person order — treat them as ballpark figures until manually verified.
             </p>
             <p>
               Currently tracking <span className="font-semibold text-foreground">{restaurants.length} restaurants</span> across LA County.

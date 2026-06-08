@@ -7,10 +7,10 @@ export interface AyceTier {
 export type PriceTier = "$" | "$$" | "$$$" | "$$$$";
 
 export const KBBQ_PRICE_RANGES: Record<PriceTier, { low: number; high: number; label: string }> = {
-  "$":    { low: 15, high: 20, label: "Under $20" },      // rare for KBBQ
-  "$$":   { low: 20, high: 35, label: "$20–$35" },
-  "$$$":  { low: 35, high: 55, label: "$35–$55" },
-  "$$$$": { low: 55, high: 80, label: "$55+" },
+  "$":    { low: 28, high: 35, label: "$28–$35" },
+  "$$":   { low: 35, high: 45, label: "$35–$45" },
+  "$$$":  { low: 45, high: 60, label: "$45–$60" },
+  "$$$$": { low: 60, high: 90, label: "$60+" },
 };
 
 export interface Restaurant {

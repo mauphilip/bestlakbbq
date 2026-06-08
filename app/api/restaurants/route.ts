@@ -6,7 +6,12 @@ import type { Restaurant } from "@/lib/types";
 
 // GET /api/restaurants — base JSON merged with KV overrides (KV wins on same ID)
 export async function GET() {
-  const kvRestaurants = await getKVRestaurants() as unknown as Restaurant[];
+  let kvRestaurants: Restaurant[] = [];
+  try {
+    kvRestaurants = await getKVRestaurants() as unknown as Restaurant[];
+  } catch {
+    // KV unavailable — fall back to base JSON only
+  }
   const kvIds = new Set(kvRestaurants.map((r) => r.id));
 
   // Base restaurants not overridden in KV

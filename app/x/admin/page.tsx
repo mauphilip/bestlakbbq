@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Lock, Trash2, Pencil, Download, ShieldCheck, RefreshCw, AlertTriangle, CheckCircle, Plus } from "lucide-react";
+import { Lock, Trash2, Download, ShieldCheck, RefreshCw, AlertTriangle, CheckCircle, Plus } from "lucide-react";
 import type { Restaurant } from "@/lib/types";
 import { KBBQ_PRICE_RANGES } from "@/lib/types";
 import AdminSearchPanel from "@/components/AdminSearchPanel";
 import RestaurantForm from "@/components/RestaurantForm";
+import YelpImportPanel from "@/components/YelpImportPanel";
 
 function getStoredToken() {
   if (typeof window === "undefined") return "";
@@ -21,7 +22,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [editTarget, setEditTarget] = useState<Restaurant | null>(null);
   const [addNew, setAddNew] = useState(false);
-  const [activeTab, setActiveTab] = useState<"search" | "manage">("manage");
+  const [activeTab, setActiveTab] = useState<"search" | "manage" | "import">("manage");
   const [refreshing, setRefreshing] = useState(false);
   const [refreshResult, setRefreshResult] = useState<{ updated: number; notFound: number } | null>(null);
   const [searchFilter, setSearchFilter] = useState("");
@@ -52,9 +53,13 @@ export default function AdminPage() {
 
   async function loadRestaurants() {
     setLoading(true);
-    const res = await fetch("/api/restaurants");
-    const data = await res.json();
-    setRestaurants(data);
+    try {
+      const res = await fetch("/api/restaurants");
+      const data = await res.json();
+      setRestaurants(Array.isArray(data) ? data : []);
+    } catch {
+      setRestaurants([]);
+    }
     setLoading(false);
   }
 
@@ -135,7 +140,7 @@ export default function AdminPage() {
 
   // ── Dashboard ─────────────────────────────────────────────────────────────
   return (
-    <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
+    <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
         <div className="flex items-center gap-3">
@@ -186,12 +191,16 @@ export default function AdminPage() {
 
       {/* Tabs */}
       <div className="flex border-b border-border mb-6">
-        {(["manage", "search"] as const).map((tab) => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-medium capitalize border-b-2 -mb-px transition-colors ${
-              activeTab === tab ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+        {([
+          { key: "manage", label: "Manage" },
+          { key: "search", label: "Search & Add" },
+          { key: "import", label: "Yelp Import" },
+        ] as const).map(({ key, label }) => (
+          <button key={key} onClick={() => setActiveTab(key)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              activeTab === key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
             }`}>
-            {tab === "search" ? "Search & Add" : "Manage Restaurants"}
+            {label}
           </button>
         ))}
       </div>
@@ -234,19 +243,20 @@ export default function AdminPage() {
 
                 return (
                   <div key={r.id}
-                    className="flex items-center gap-3 bg-card border border-border rounded-xl p-3 hover:border-border/80 transition-colors">
+                    onClick={() => setEditTarget(r)}
+                    className="flex items-center gap-3 bg-card border border-border rounded-xl p-3 hover:border-primary/40 hover:bg-foreground/[0.02] cursor-pointer transition-colors">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium truncate">{r.name}</span>
                         {isKv && (
                           <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded border border-primary/20 shrink-0">KV</span>
                         )}
-                        {!r.price_verified && (
-                          <span className="flex items-center gap-0.5 text-xs text-yellow-500 shrink-0">
-                            <AlertTriangle className="w-3 h-3" /> unverified
+                        {!r.price_verified ? (
+                          <span title="Price hasn't been manually confirmed — it's estimated from the Yelp price tier or seeded data"
+                            className="flex items-center gap-0.5 text-xs text-yellow-500 shrink-0">
+                            <AlertTriangle className="w-3 h-3" /> price est.
                           </span>
-                        )}
-                        {r.price_verified && (
+                        ) : (
                           <span className="flex items-center gap-0.5 text-xs text-green-500 shrink-0">
                             <CheckCircle className="w-3 h-3" /> verified
                           </span>
@@ -261,11 +271,7 @@ export default function AdminPage() {
                         )}
                       </p>
                     </div>
-                    <div className="flex gap-1.5 shrink-0">
-                      <button onClick={() => setEditTarget(r)}
-                        className="flex items-center gap-1 text-xs px-2 py-1 border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
-                        <Pencil className="w-3 h-3" /> Edit
-                      </button>
+                    <div className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                       {isKv && (
                         <button onClick={() => deleteRestaurant(r.id, r.name)}
                           className="flex items-center gap-1 text-xs px-2 py-1 border border-red-500/20 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors">
@@ -288,6 +294,19 @@ export default function AdminPage() {
           onAdded={(r) => {
             setRestaurants((prev) => [...prev.filter((x) => x.id !== r.id), r]);
             setActiveTab("manage");
+          }}
+        />
+      )}
+
+      {/* ── Yelp Import tab ── */}
+      {activeTab === "import" && (
+        <YelpImportPanel
+          token={token}
+          onImported={(imported) => {
+            setRestaurants((prev) => {
+              const ids = new Set(imported.map((r) => r.id));
+              return [...prev.filter((x) => !ids.has(x.id)), ...imported];
+            });
           }}
         />
       )}
