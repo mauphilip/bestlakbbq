@@ -170,10 +170,10 @@ function ChartInner({
           content={<CustomTooltip />}
           cursor={{ strokeDasharray: "3 3", stroke: "rgba(255,255,255,0.08)" }}
         />
-        <ReferenceLine x={avgRating} stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4"
-          label={{ value: "avg rating", fill: "rgba(255,255,255,0.2)", fontSize: 9, position: "top" }} />
-        <ReferenceLine y={avgCost} stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4"
-          label={{ value: "avg cost", fill: "rgba(255,255,255,0.2)", fontSize: 9, position: "right" }} />
+        <ReferenceLine x={avgRating} stroke="rgba(255,255,255,0.45)" strokeWidth={1.5}
+          label={{ value: `avg ${avgRating.toFixed(2)}`, fill: "rgba(255,255,255,0.55)", fontSize: 9, position: "insideTopRight" }} />
+        <ReferenceLine y={avgCost} stroke="rgba(255,255,255,0.45)" strokeWidth={1.5}
+          label={{ value: `avg $${Math.round(avgCost)}`, fill: "rgba(255,255,255,0.55)", fontSize: 9, position: "insideTopRight" }} />
 
         {ayceData.length > 0 && (
           <Scatter name="AYCE" data={ayceData}
@@ -300,12 +300,17 @@ export default function KBBQChart({ restaurants }: Props) {
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
         <div className="flex items-center gap-1.5">
-          <svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="rgba(255,255,255,0.5)" /></svg>
-          AYCE
+          {/* Circle = AYCE — matches rendered shape */}
+          <svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="#f97316" fillOpacity="0.85" /></svg>
+          Circle = AYCE
         </div>
         <div className="flex items-center gap-1.5">
-          <svg width="12" height="12" viewBox="0 0 12 12"><polygon points="6,1 11,11 1,11" fill="rgba(255,255,255,0.5)" /></svg>
-          Non-AYCE (est.)
+          {/* Upward triangle = Non-AYCE — matches rendered polygon */}
+          <svg width="12" height="12" viewBox="0 0 12 12"><polygon points="6,1 11,11 1,11" fill="#ef4444" fillOpacity="0.85" /></svg>
+          Triangle = Non-AYCE (est.)
+        </div>
+        <div className="flex items-center gap-1.5 text-muted-foreground/60">
+          Bubble size = review count
         </div>
         <div className="flex items-center gap-3 ml-auto">
           {[["< $25", "#f59e0b"], ["$25–34", "#f97316"], ["$35–44", "#ef4444"], ["$45+", "#991b1b"]].map(([label, color]) => (
@@ -318,7 +323,7 @@ export default function KBBQChart({ restaurants }: Props) {
       </div>
 
       {/* Chart */}
-      <div className="w-full h-[500px] bg-card/50 rounded-xl border border-border p-3">
+      <div className="w-full h-[540px] bg-card/50 rounded-xl border border-border p-3">
         {chartContent}
       </div>
 
@@ -407,8 +412,9 @@ export default function KBBQChart({ restaurants }: Props) {
 
           {/* FS legend */}
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground px-6 py-2 border-b border-border/40 shrink-0">
-            <div className="flex items-center gap-1.5"><svg width="10" height="10" viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="rgba(255,255,255,0.5)" /></svg>Circle = AYCE</div>
-            <div className="flex items-center gap-1.5"><svg width="10" height="10" viewBox="0 0 12 12"><polygon points="6,1 11,11 1,11" fill="rgba(255,255,255,0.5)" /></svg>Triangle = Non-AYCE</div>
+            <div className="flex items-center gap-1.5"><svg width="10" height="10" viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="#f97316" fillOpacity="0.85" /></svg>Circle = AYCE</div>
+            <div className="flex items-center gap-1.5"><svg width="10" height="10" viewBox="0 0 12 12"><polygon points="6,1 11,11 1,11" fill="#ef4444" fillOpacity="0.85" /></svg>Triangle = Non-AYCE (est.)</div>
+            <div className="flex items-center gap-1.5 text-muted-foreground/60">Bubble size = review count</div>
             <div className="flex items-center gap-3 ml-auto">
               {[["< $25", "#f59e0b"], ["$25–34", "#f97316"], ["$35–44", "#ef4444"], ["$45+", "#991b1b"]].map(([label, color]) => (
                 <div key={label} className="flex items-center gap-1">
