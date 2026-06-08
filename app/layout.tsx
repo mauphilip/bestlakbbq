@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
 import Nav from "@/components/Nav";
+import { ThemeProvider } from "@/components/ThemeProvider";
 
 const geist = Geist({
   variable: "--font-sans",
@@ -19,10 +20,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geist.variable} h-full`}>
+    <html lang="en" className={`${geist.variable} h-full dark`}>
       <body className="min-h-full bg-background text-foreground antialiased grain">
-        <Nav />
-        <main>{children}</main>
+        <ThemeProvider>
+          <Nav />
+          <main>{children}</main>
+        </ThemeProvider>
       </body>
     </html>
   );

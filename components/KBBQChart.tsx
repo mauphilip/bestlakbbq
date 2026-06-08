@@ -133,26 +133,26 @@ export default function KBBQChart({ restaurants }: Props) {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex rounded-lg border border-border overflow-hidden text-sm">
+      <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-2 sm:gap-3">
+        <div className="flex rounded-lg border border-border overflow-hidden text-sm w-full sm:w-auto">
           {(["all", "ayce", "non-ayce"] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-4 py-1.5 transition-colors ${
+              className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 transition-colors ${
                 filter === f
                   ? "bg-primary text-primary-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                  : "text-muted-foreground hover:text-foreground hover:bg-foreground/5"
               }`}
             >
-              {f === "all" ? "All" : f === "ayce" ? "AYCE Only" : "Non-AYCE Only"}
+              {f === "all" ? "All" : f === "ayce" ? "AYCE" : "Non-AYCE"}
             </button>
           ))}
         </div>
         <select
           value={neighborhood}
           onChange={(e) => setNeighborhood(e.target.value)}
-          className="text-sm bg-card border border-border rounded-lg px-3 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          className="text-sm bg-card border border-border rounded-lg px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-auto"
         >
           {NEIGHBORHOODS.map((n) => (
             <option key={n} value={n}>{n === "All" ? "All Neighborhoods" : n}</option>

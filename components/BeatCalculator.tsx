@@ -127,7 +127,7 @@ export default function BeatCalculator({ items }: Props) {
       {totals.totalOz > 0 && (
         <div className="rounded-xl border border-border bg-card/80 p-6 space-y-4">
           <h2 className="font-bold text-lg">Your Haul</h2>
-          <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
             <div className="bg-secondary/50 rounded-lg p-3">
               <p className="text-2xl font-bold">{totals.totalOz} oz</p>
               <p className="text-xs text-muted-foreground mt-1">Total meat eaten</p>
