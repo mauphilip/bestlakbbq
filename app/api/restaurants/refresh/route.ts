@@ -1,24 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis, KV_RESTAURANT_PREFIX, getKVRestaurants } from "@/lib/kv";
 import { verifyAdminToken } from "@/lib/auth";
+import { getYelpId, KBBQ_CATEGORY } from "@/lib/yelp-shared";
+import { yelpFetch, yelpSearch } from "@/lib/yelp-server";
 import baseRestaurants from "@/data/restaurants.json";
 import type { Restaurant, PriceTier } from "@/lib/types";
-
-const YELP_API = "https://api.yelp.com/v3";
-
-async function yelpFetch(path: string) {
-  const res = await fetch(`${YELP_API}${path}`, {
-    headers: { Authorization: `Bearer ${process.env.YELP_API_KEY}` },
-  });
-  if (!res.ok) return null;
-  return res.json();
-}
-
-/** Extract Yelp business ID from a yelp.com URL */
-function yelpIdFromUrl(url: string): string | null {
-  const match = url.match(/yelp\.com\/biz\/([^?#/]+)/);
-  return match ? match[1] : null;
-}
 
 interface YelpBusiness {
   id: string;
@@ -29,22 +15,21 @@ interface YelpBusiness {
 }
 
 async function fetchYelpData(restaurant: Restaurant): Promise<YelpBusiness | null> {
-  // Prefer lookup by Yelp URL slug (most reliable)
-  const slug = restaurant.yelp_url ? yelpIdFromUrl(restaurant.yelp_url) : null;
-  if (slug) {
-    const data = await yelpFetch(`/businesses/${slug}`);
-    if (data?.id) return data;
+  // Prefer lookup by Yelp id/URL slug (most reliable)
+  const id = getYelpId(restaurant);
+  if (id) {
+    const data = await yelpFetch(`/businesses/${id}`);
+    if (data?.id) return data as unknown as YelpBusiness;
   }
 
   // Fallback: search by name + location
-  const params = new URLSearchParams({
+  const { businesses } = await yelpSearch({
     term: restaurant.name,
     location: `${restaurant.neighborhood}, Los Angeles, CA`,
     limit: "1",
-    categories: "koreanbbq",
+    categories: KBBQ_CATEGORY,
   });
-  const results = await yelpFetch(`/businesses/search?${params}`);
-  return results?.businesses?.[0] ?? null;
+  return (businesses?.[0] as unknown as YelpBusiness) ?? null;
 }
 
 // POST /api/restaurants/refresh — bulk sync ratings + price tier from Yelp

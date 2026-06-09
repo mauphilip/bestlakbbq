@@ -1,33 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminToken } from "@/lib/auth";
 import { getKVRestaurants } from "@/lib/kv";
+import { getYelpId } from "@/lib/yelp-shared";
+import { yelpFetch } from "@/lib/yelp-server";
 import baseRestaurants from "@/data/restaurants.json";
 import type { Restaurant } from "@/lib/types";
 import type { RestaurantDiff } from "@/lib/yelp-types";
-
-const YELP_API = "https://api.yelp.com/v3";
 
 function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function fetchYelpBiz(id: string): Promise<Record<string, unknown> | null> {
-  try {
-    const res = await fetch(`${YELP_API}/businesses/${id}`, {
-      headers: { Authorization: `Bearer ${process.env.YELP_API_KEY}` },
-    });
-    if (!res.ok) return null;
-    return res.json();
-  } catch {
-    return null;
-  }
-}
-
-function getYelpId(r: Restaurant): string | null {
-  if (r.yelp_id) return r.yelp_id;
-  const match = r.yelp_url?.match(/yelp\.com\/biz\/([^?#/]+)/);
-  return match?.[1] ?? null;
-}
+const fetchYelpBiz = (id: string) => yelpFetch(`/businesses/${id}`);
 
 type CheckMode = "closed" | "updates";
 

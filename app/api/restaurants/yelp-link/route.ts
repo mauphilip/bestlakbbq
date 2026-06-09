@@ -1,50 +1,58 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminToken } from "@/lib/auth";
 import { getKVRestaurants, redis, KV_RESTAURANT_PREFIX } from "@/lib/kv";
+import { getYelpId, KBBQ_CATEGORY, type YelpBizLite } from "@/lib/yelp-shared";
+import { yelpSearch, hasYelpKey } from "@/lib/yelp-server";
 import baseRestaurants from "@/data/restaurants.json";
 import type { Restaurant } from "@/lib/types";
 
-const YELP_API = "https://api.yelp.com/v3";
-
 function delay(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 
-function getYelpId(r: Restaurant): string | null {
-  if (r.yelp_id) return r.yelp_id;
-  const m = r.yelp_url?.match(/yelp\.com\/biz\/([^?#/]+)/);
-  return m?.[1] ?? null;
+interface LinkCandidate {
+  yelp_id: string; name: string; url: string; rating: number;
+  review_count: number; address: string; categories: string[];
 }
 
-async function searchYelp(name: string, neighborhood: string) {
-  const qs = new URLSearchParams({
+async function searchYelp(name: string, location: string): Promise<LinkCandidate[]> {
+  const { businesses } = await yelpSearch({
     term: name,
-    location: `${neighborhood}, Los Angeles, CA`,
-    categories: "korean,koreanbbq",
+    location,
+    categories: KBBQ_CATEGORY,
     limit: "5",
   });
-  const res = await fetch(`${YELP_API}/businesses/search?${qs}`, {
-    headers: { Authorization: `Bearer ${process.env.YELP_API_KEY}` },
-  });
-  if (!res.ok) return [];
-  const json = await res.json();
-  return (json.businesses ?? []) as Array<{
-    id: string; name: string; url: string; rating: number; review_count: number;
-    location: { address1: string; city: string };
-    categories: { alias: string; title: string }[];
-  }>;
+  return businesses.map((b: YelpBizLite) => ({
+    yelp_id: b.id,
+    name: b.name,
+    url: (b.url ?? "").split("?")[0],
+    rating: b.rating ?? 0,
+    review_count: b.review_count ?? 0,
+    address: `${b.location?.address1 ?? ""}, ${b.location?.city ?? ""}`,
+    categories: (b.categories ?? []).map((c) => c.alias),
+  }));
 }
 
 // POST /api/restaurants/yelp-link
-// body: { mode: "scan" }  → search Yelp for each unlinked restaurant, return candidates
-// body: { id: string, yelp_id: string, yelp_url: string }  → save the link to KV
+// body: { mode: "scan" }                       → search Yelp for each unlinked restaurant
+// body: { mode: "search", term, location }     → single search, return ≤5 candidates (for the form)
+// body: { id, yelp_id, yelp_url }              → save the link to KV
 export async function POST(req: NextRequest) {
   if (!verifyAdminToken(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!process.env.YELP_API_KEY) {
+  if (!hasYelpKey()) {
     return NextResponse.json({ error: "YELP_API_KEY not set" }, { status: 500 });
   }
 
   const body = await req.json().catch(() => ({}));
+
+  // ── Single search (form "Find on Yelp") ──
+  if (body.mode === "search" && body.term) {
+    const location = body.location
+      ? `${body.location}, Los Angeles, CA`
+      : "Los Angeles, CA";
+    const candidates = await searchYelp(body.term as string, location);
+    return NextResponse.json({ candidates });
+  }
 
   // ── Save a link ──
   if (body.id && body.yelp_id) {
@@ -85,22 +93,14 @@ export async function POST(req: NextRequest) {
   }> = [];
 
   for (const r of unlinked) {
-    const bizzes = await searchYelp(r.name, r.neighborhood);
+    const candidates = await searchYelp(r.name, `${r.neighborhood}, Los Angeles, CA`);
     await delay(120);
     results.push({
       id: r.id,
       name: r.name,
       neighborhood: r.neighborhood,
       yelp_url: r.yelp_url ?? "",
-      candidates: bizzes.map((b) => ({
-        yelp_id: b.id,
-        name: b.name,
-        url: b.url.split("?")[0],
-        rating: b.rating,
-        review_count: b.review_count,
-        address: `${b.location.address1}, ${b.location.city}`,
-        categories: b.categories.map((c) => c.alias),
-      })),
+      candidates,
     });
   }
 

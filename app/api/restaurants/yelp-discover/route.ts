@@ -1,55 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminToken } from "@/lib/auth";
 import { getKVRestaurants, redis } from "@/lib/kv";
+import { KBBQ_CATEGORY, slugFromUrl, bizToCandidate as sharedBizToCandidate, type YelpBizLite } from "@/lib/yelp-shared";
+import { yelpSearch } from "@/lib/yelp-server";
 import baseRestaurants from "@/data/restaurants.json";
-import type { Restaurant, PriceTier } from "@/lib/types";
+import type { Restaurant } from "@/lib/types";
 import type { DiscoverCandidate, DiscoverCache } from "@/lib/yelp-types";
 
-const YELP_API = "https://api.yelp.com/v3";
 const CACHE_KEY = "kbbq_discover_cache";
 
-// Yelp only searches `categories=koreanbbq`.
-// This is the dedicated KBBQ category alias and is the most accurate filter.
-// "barbeque,korean" looked correct but Yelp treats comma-separated categories as OR
-// (returns any BBQ place OR any Korean place), which floods results with coffee shops etc.
-
-interface YelpBiz {
-  id: string;
-  name: string;
-  rating: number;
-  review_count: number;
-  price?: string;
-  url: string;
-  location: { address1: string; city: string; state: string; zip_code: string };
-  coordinates: { latitude: number; longitude: number };
-  categories: { alias: string; title: string }[];
-  image_url?: string;
-  is_closed: boolean;
-}
-
-async function yelpSearch(
-  params: Record<string, string>
-): Promise<{ businesses: YelpBiz[]; total: number; error?: string }> {
-  const qs = new URLSearchParams({ limit: "50", sort_by: "review_count", ...params });
-  try {
-    const res = await fetch(`${YELP_API}/businesses/search?${qs}`, {
-      headers: { Authorization: `Bearer ${process.env.YELP_API_KEY}` },
-    });
-    const json = await res.json();
-    if (!res.ok) return { businesses: [], total: 0, error: json.error?.description ?? `HTTP ${res.status}` };
-    return { businesses: json.businesses ?? [], total: json.total ?? 0 };
-  } catch (e) {
-    return { businesses: [], total: 0, error: String(e) };
-  }
-}
-
-function getKbbqConfidence(biz: YelpBiz): "high" | "medium" | "low" {
-  const aliases = (biz.categories ?? []).map((c) => c.alias);
-  if (aliases.includes("koreanbbq")) return "high";
-  // Has BBQ-related keywords in name even without the koreanbbq category tag
-  if (biz.name && /\b(kbbq|galbi|bulgogi|gopchang|samgyeopsal|숯불|고기|갈비|구이|bbq grill)\b/i.test(biz.name)) return "medium";
-  return "low";
-}
+// Yelp only searches `categories=koreanbbq` — the dedicated KBBQ alias and the most
+// accurate filter. Comma-separated aliases are OR in Yelp and flood results.
 
 function buildKnownSet(restaurants: Restaurant[]) {
   const ids = new Set<string>();
@@ -140,7 +101,7 @@ async function runDiscovery(known: ReturnType<typeof buildKnownSet>, zipMap: Rec
   for (const location of locations) {
     // Paginate up to 200 results per location (Yelp max with offset)
     for (let offset = 0; offset < 200; offset += 50) {
-      const page = await yelpSearch({ categories: "koreanbbq", location, offset: String(offset) });
+      const page = await yelpSearch({ categories: KBBQ_CATEGORY, location, offset: String(offset), sort_by: "review_count" });
 
       if (page.error) {
         errors.push(`${location} (offset ${offset}): ${page.error}`);
@@ -163,40 +124,17 @@ async function runDiscovery(known: ReturnType<typeof buildKnownSet>, zipMap: Rec
   return { candidates, totalScanned: seen.size, errors };
 }
 
-function bizToCandidate(biz: YelpBiz, known: ReturnType<typeof buildKnownSet>, zipMap: Record<string, string> = ZIP_TO_NEIGHBORHOOD): DiscoverCandidate {
-  const slug = biz.url?.match(/yelp\.com\/biz\/([^?#/]+)/)?.[1] ?? "";
+function bizToCandidate(biz: YelpBizLite, known: ReturnType<typeof buildKnownSet>, zipMap: Record<string, string> = ZIP_TO_NEIGHBORHOOD): DiscoverCandidate {
+  const slug = slugFromUrl(biz.url) ?? "";
   const alreadyTracked =
     (biz.id ? known.ids.has(biz.id) : false) ||
     (slug ? known.slugs.has(slug) : false) ||
     (biz.name ? known.names.has(biz.name.toLowerCase().trim()) : false);
 
-  return {
-    id: slug || biz.id || "",
-    yelp_id: biz.id ?? "",
-    name: biz.name ?? "",
+  return sharedBizToCandidate(biz, {
     neighborhood: cityToNeighborhood(biz.location?.city ?? "", biz.location?.zip_code, zipMap),
-    zip_code: biz.location?.zip_code,
-    ayce: false,
-    ayce_tiers: [],
-    non_ayce_est_per_person: null,
-    price_tier: (biz.price ?? "$$") as PriceTier,
-    price_verified: false,
-    yelp_rating: biz.rating ?? 0,
-    google_rating: 0,
-    review_count: biz.review_count ?? 0,
-    yelp_url: biz.url ?? "",
-    lat: biz.coordinates?.latitude ?? 34.05,
-    lng: biz.coordinates?.longitude ?? -118.3,
-    notes: "",
-    last_price_check: new Date().toISOString().slice(0, 10),
-    last_yelp_sync: new Date().toISOString(),
-    kv_managed: true,
-    already_tracked: alreadyTracked,
-    image_url: biz.image_url,
-    is_closed: biz.is_closed ?? false,
-    kbbq_confidence: getKbbqConfidence(biz),
-    categories_raw: (biz.categories ?? []).map((c) => c.alias),
-  };
+    alreadyTracked,
+  });
 }
 
 function mergeWithCache(existing: DiscoverCandidate[], fresh: DiscoverCandidate[]): DiscoverCandidate[] {
