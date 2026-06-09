@@ -120,33 +120,43 @@ export async function POST(req: NextRequest) {
   if (!verifyAdminToken(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
   if (!process.env.YELP_API_KEY) {
-    return NextResponse.json({ error: "YELP_API_KEY is not set on the server. Add it in Vercel → Project Settings → Environment Variables." }, { status: 500 });
+    return NextResponse.json(
+      { error: "YELP_API_KEY is not set. Add it in Vercel → Project Settings → Environment Variables." },
+      { status: 500 }
+    );
   }
 
-  const body = await req.json().catch(() => ({}));
-  const filterIds: string[] = body.ids ?? [];
-
-  // KV failure is non-fatal — fall back to base JSON only
-  const base = baseRestaurants as Restaurant[];
-  let kv: Restaurant[] = [];
   try {
-    kv = (await getKVRestaurants()) as unknown as Restaurant[];
-  } catch { /* ignore */ }
+    const body = await req.json().catch(() => ({}));
+    const filterIds: string[] = body.ids ?? [];
 
-  let all = [...base, ...kv];
-  if (filterIds.length) all = all.filter((r) => filterIds.includes(r.id));
+    // KV failure is non-fatal — fall back to base JSON only
+    const base = baseRestaurants as Restaurant[];
+    let kv: Restaurant[] = [];
+    try {
+      kv = (await getKVRestaurants()) as unknown as Restaurant[];
+    } catch { /* ignore */ }
 
-  const results = await checkAll(all);
+    let all = [...base, ...kv];
+    if (filterIds.length) all = all.filter((r) => filterIds.includes(r.id));
 
-  return NextResponse.json({
-    results,
-    closedCount: results.filter((r) => r.now_closed).length,
-    changedCount: results.filter((r) => r.changes.length > 0 && !r.now_closed).length,
-    upToDateCount: results.filter((r) => r.changes.length === 0 && !r.now_closed && !r.error).length,
-    errorCount: results.filter((r) => r.error).length,
-    total: results.length,
-  });
+    const results = await checkAll(all);
+
+    return NextResponse.json({
+      results,
+      closedCount: results.filter((r) => r.now_closed).length,
+      changedCount: results.filter((r) => r.changes.length > 0 && !r.now_closed).length,
+      upToDateCount: results.filter((r) => r.changes.length === 0 && !r.now_closed && !r.error).length,
+      errorCount: results.filter((r) => r.error).length,
+      total: results.length,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[yelp-check]", message);
+    return NextResponse.json({ error: `Server error: ${message}` }, { status: 500 });
+  }
 }
 
 // GET kept for backward compat

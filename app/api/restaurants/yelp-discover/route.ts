@@ -186,70 +186,79 @@ export async function GET(req: NextRequest) {
   if (!verifyAdminToken(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!process.env.YELP_API_KEY) {
-    return NextResponse.json({ error: "YELP_API_KEY not configured on the server." }, { status: 500 });
-  }
 
   const forceRefresh = req.nextUrl.searchParams.get("refresh") === "1";
 
-  // Build the known-restaurant set (non-fatal — if KV is down, use base JSON only)
-  const base = baseRestaurants as Restaurant[];
-  let kv: Restaurant[] = [];
   try {
-    kv = (await getKVRestaurants()) as unknown as Restaurant[];
-  } catch {
-    // KV unavailable — continue with base restaurants only
-  }
-  const known = buildKnownSet([...base, ...kv]);
+    // Build the known-restaurant set (non-fatal — if KV is down, use base JSON only)
+    const base = baseRestaurants as Restaurant[];
+    let kv: Restaurant[] = [];
+    try {
+      kv = (await getKVRestaurants()) as unknown as Restaurant[];
+    } catch { /* KV unavailable */ }
+    const known = buildKnownSet([...base, ...kv]);
 
-  // Load KV cache (non-fatal)
-  let cache: DiscoverCache | null = null;
-  try {
-    cache = await redis.get<DiscoverCache>(CACHE_KEY);
-  } catch { /* ignore */ }
+    // Load KV cache (non-fatal)
+    let cache: DiscoverCache | null = null;
+    try {
+      cache = await redis.get<DiscoverCache>(CACHE_KEY);
+    } catch { /* ignore */ }
 
-  // Serve cache if available and not a forced refresh
-  if (cache && !forceRefresh) {
-    const updated = cache.candidates.map((c) => ({
-      ...c,
-      already_tracked:
-        (c.yelp_id ? known.ids.has(c.yelp_id) : false) ||
-        (c.id ? known.slugs.has(c.id) : false) ||
-        known.names.has((c.name ?? "").toLowerCase().trim()),
-    }));
+    // Serve cache if available and not a forced refresh — no API key needed
+    if (cache && !forceRefresh) {
+      const updated = cache.candidates.map((c) => ({
+        ...c,
+        already_tracked:
+          (c.yelp_id ? known.ids.has(c.yelp_id) : false) ||
+          (c.id ? known.slugs.has(c.id) : false) ||
+          known.names.has((c.name ?? "").toLowerCase().trim()),
+      }));
+      return NextResponse.json({
+        candidates: updated,
+        totalScanned: cache.totalScanned,
+        lastFetched: cache.lastFetched,
+        fromCache: true,
+      });
+    }
+
+    // No cache + no refresh → return empty; UI will show the Fetch button
+    if (!forceRefresh) {
+      return NextResponse.json({ candidates: [], totalScanned: 0, fromCache: false });
+    }
+
+    // Only check API key when we actually need to call Yelp
+    if (!process.env.YELP_API_KEY) {
+      return NextResponse.json(
+        { error: "YELP_API_KEY is not set. Add it in Vercel → Project Settings → Environment Variables." },
+        { status: 500 }
+      );
+    }
+
+    // Full Yelp scan
+    const { candidates: fresh, totalScanned, errors } = await runDiscovery(known);
+    const merged = mergeWithCache(cache?.candidates ?? [], fresh);
+
+    const newCache: DiscoverCache = {
+      candidates: merged,
+      lastFetched: new Date().toISOString(),
+      totalScanned,
+    };
+
+    try {
+      await redis.set(CACHE_KEY, newCache, { ex: 60 * 60 * 24 * 7 });
+    } catch { /* non-fatal */ }
+
     return NextResponse.json({
-      candidates: updated,
-      totalScanned: cache.totalScanned,
-      lastFetched: cache.lastFetched,
-      fromCache: true,
+      candidates: merged,
+      totalScanned,
+      newCount: merged.filter((c) => !c.already_tracked && !c.is_closed).length,
+      errors: errors.length ? errors : undefined,
+      fromCache: false,
+      lastFetched: newCache.lastFetched,
     });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[yelp-discover]", message);
+    return NextResponse.json({ error: `Server error: ${message}` }, { status: 500 });
   }
-
-  // No cache + no refresh → return empty; UI will show the Fetch button
-  if (!forceRefresh) {
-    return NextResponse.json({ candidates: [], totalScanned: 0, fromCache: false });
-  }
-
-  // Full Yelp scan
-  const { candidates: fresh, totalScanned, errors } = await runDiscovery(known);
-  const merged = mergeWithCache(cache?.candidates ?? [], fresh);
-
-  const newCache: DiscoverCache = {
-    candidates: merged,
-    lastFetched: new Date().toISOString(),
-    totalScanned,
-  };
-
-  try {
-    await redis.set(CACHE_KEY, newCache, { ex: 60 * 60 * 24 * 7 }); // cache 7 days
-  } catch { /* non-fatal — still return results */ }
-
-  return NextResponse.json({
-    candidates: merged,
-    totalScanned,
-    newCount: merged.filter((c) => !c.already_tracked && !c.is_closed).length,
-    errors: errors.length ? errors : undefined,
-    fromCache: false,
-    lastFetched: newCache.lastFetched,
-  });
 }
