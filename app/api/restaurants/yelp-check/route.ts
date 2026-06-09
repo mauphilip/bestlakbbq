@@ -35,15 +35,15 @@ async function checkAll(restaurants: Restaurant[]): Promise<RestaurantDiff[]> {
   for (const r of restaurants) {
     const yid = getYelpId(r);
     const current = {
-      rating: r.yelp_rating,
-      review_count: r.review_count,
+      rating: r.yelp_rating ?? 0,
+      review_count: r.review_count ?? 0,
       price_tier: r.price_tier ?? null,
       yelp_url: r.yelp_url ?? "",
     };
 
     if (!yid) {
       results.push({
-        id: r.id, name: r.name, neighborhood: r.neighborhood,
+        id: r.id ?? "", name: r.name ?? "", neighborhood: r.neighborhood ?? "",
         yelp_id: null, yelp_url: r.yelp_url ?? "",
         current, yelp: null, changes: [], now_closed: false,
         error: "No Yelp ID — run Sync from Yelp first",
@@ -56,7 +56,7 @@ async function checkAll(restaurants: Restaurant[]): Promise<RestaurantDiff[]> {
 
     if (!biz) {
       results.push({
-        id: r.id, name: r.name, neighborhood: r.neighborhood,
+        id: r.id ?? "", name: r.name ?? "", neighborhood: r.neighborhood ?? "",
         yelp_id: yid, yelp_url: r.yelp_url ?? "",
         current, yelp: null, changes: [], now_closed: false,
         error: "Yelp returned no data",
@@ -85,11 +85,11 @@ async function checkAll(restaurants: Restaurant[]): Promise<RestaurantDiff[]> {
     if (isClosed) {
       changes.push({ field: "is_closed", label: "Status", old: "Open", new: "Permanently Closed" });
     }
-    if (yelpRating !== null && Math.abs(yelpRating - r.yelp_rating) >= 0.1) {
-      changes.push({ field: "yelp_rating", label: "Rating", old: r.yelp_rating, new: yelpRating });
+    if (yelpRating !== null && Math.abs(yelpRating - (r.yelp_rating ?? 0)) >= 0.1) {
+      changes.push({ field: "yelp_rating", label: "Rating", old: r.yelp_rating ?? 0, new: yelpRating });
     }
-    if (yelpReviews !== null && yelpReviews !== r.review_count) {
-      changes.push({ field: "review_count", label: "Reviews", old: r.review_count, new: yelpReviews });
+    if (yelpReviews !== null && yelpReviews !== (r.review_count ?? 0)) {
+      changes.push({ field: "review_count", label: "Reviews", old: r.review_count ?? 0, new: yelpReviews });
     }
     if (yelpPrice && yelpPrice !== (r.price_tier ?? null)) {
       changes.push({ field: "price_tier", label: "Price Tier", old: r.price_tier ?? "—", new: yelpPrice });

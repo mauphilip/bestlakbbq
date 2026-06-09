@@ -44,10 +44,10 @@ async function yelpSearch(
 }
 
 function getKbbqConfidence(biz: YelpBiz): "high" | "medium" | "low" {
-  const aliases = biz.categories.map((c) => c.alias);
+  const aliases = (biz.categories ?? []).map((c) => c.alias);
   if (aliases.includes("koreanbbq")) return "high";
   // Has BBQ-related keywords in name even without the koreanbbq category tag
-  if (/\b(kbbq|galbi|bulgogi|gopchang|samgyeopsal|숯불|고기|갈비|구이|bbq grill)\b/i.test(biz.name)) return "medium";
+  if (biz.name && /\b(kbbq|galbi|bulgogi|gopchang|samgyeopsal|숯불|고기|갈비|구이|bbq grill)\b/i.test(biz.name)) return "medium";
   return "low";
 }
 
@@ -131,24 +131,24 @@ async function runDiscovery(known: ReturnType<typeof buildKnownSet>) {
 function bizToCandidate(biz: YelpBiz, known: ReturnType<typeof buildKnownSet>): DiscoverCandidate {
   const slug = biz.url?.match(/yelp\.com\/biz\/([^?#/]+)/)?.[1] ?? "";
   const alreadyTracked =
-    known.ids.has(biz.id) ||
+    (biz.id ? known.ids.has(biz.id) : false) ||
     (slug ? known.slugs.has(slug) : false) ||
     (biz.name ? known.names.has(biz.name.toLowerCase().trim()) : false);
 
   return {
-    id: slug || biz.id,
-    yelp_id: biz.id,
-    name: biz.name,
-    neighborhood: cityToNeighborhood(biz.location.city),
+    id: slug || biz.id || "",
+    yelp_id: biz.id ?? "",
+    name: biz.name ?? "",
+    neighborhood: cityToNeighborhood(biz.location?.city ?? ""),
     ayce: false,
     ayce_tiers: [],
     non_ayce_est_per_person: null,
     price_tier: (biz.price ?? "$$") as PriceTier,
     price_verified: false,
-    yelp_rating: biz.rating,
+    yelp_rating: biz.rating ?? 0,
     google_rating: 0,
-    review_count: biz.review_count,
-    yelp_url: biz.url,
+    review_count: biz.review_count ?? 0,
+    yelp_url: biz.url ?? "",
     lat: biz.coordinates?.latitude ?? 34.05,
     lng: biz.coordinates?.longitude ?? -118.3,
     notes: "",
@@ -157,9 +157,9 @@ function bizToCandidate(biz: YelpBiz, known: ReturnType<typeof buildKnownSet>): 
     kv_managed: true,
     already_tracked: alreadyTracked,
     image_url: biz.image_url,
-    is_closed: biz.is_closed,
+    is_closed: biz.is_closed ?? false,
     kbbq_confidence: getKbbqConfidence(biz),
-    categories_raw: biz.categories.map((c) => c.alias),
+    categories_raw: (biz.categories ?? []).map((c) => c.alias),
   };
 }
 
