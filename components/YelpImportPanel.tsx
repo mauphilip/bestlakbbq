@@ -514,21 +514,10 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
                 </div>
               )}
 
-              {/* Diff table */}
+              {/* Diff list — vertical card-per-restaurant layout */}
               {filteredDiffs.length > 0 ? (
                 <>
-                  {/* Header */}
-                  <div className="hidden md:grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto] gap-x-4 px-3 py-2 text-xs font-medium text-muted-foreground border-b border-border">
-                    <span />
-                    <span>Restaurant</span>
-                    <span className="text-right">Rating</span>
-                    <span className="text-right">Reviews</span>
-                    <span className="text-right">Tier</span>
-                    <span>Yelp Categories</span>
-                    <span />
-                  </div>
-
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {filteredDiffs.map((diff) => {
                       const hasChanges = diff.changes.length > 0;
                       const isApplied = appliedIds.has(diff.id);
@@ -536,108 +525,110 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
                       const ratingChange = diff.changes.find((c) => c.field === "yelp_rating");
                       const reviewChange = diff.changes.find((c) => c.field === "review_count");
                       const tierChange = diff.changes.find((c) => c.field === "price_tier");
+                      const urlChange = diff.changes.find((c) => c.field === "yelp_url");
+                      // Fallback: if name is blank use yelp_id then URL slug
+                      const displayName = diff.name || diff.yelp_id || diff.yelp_url?.match(/yelp\.com\/biz\/([^?#/]+)/)?.[1] || "Unknown restaurant";
 
                       return (
                         <div key={diff.id}
-                          className={`rounded-xl border px-3 py-3 transition-colors ${
+                          className={`rounded-xl border px-4 py-3 transition-colors ${
                             diff.now_closed ? "border-red-500/30 bg-red-500/5" :
                             isApplied ? "border-green-500/20 bg-green-500/5 opacity-70" :
                             hasChanges && isSel ? "border-primary/30 bg-primary/5" :
                             hasChanges ? "border-yellow-500/20 bg-yellow-500/5" :
                             "border-border bg-card/50"
                           }`}>
-                          {/* Mobile layout */}
-                          <div className="flex items-start gap-3 md:hidden">
+
+                          {/* Row 1: checkbox + name + badges + Yelp link */}
+                          <div className="flex items-center gap-3">
                             {hasChanges && !diff.now_closed && !isApplied ? (
                               <div onClick={() => setSelectedSync((s) => { const n = new Set(s); isSel ? n.delete(diff.id) : n.add(diff.id); return n; })}
-                                className={`mt-0.5 w-4 h-4 rounded border shrink-0 cursor-pointer flex items-center justify-center ${isSel ? "bg-primary border-primary" : "border-border"}`}>
+                                className={`w-4 h-4 rounded border shrink-0 cursor-pointer flex items-center justify-center ${isSel ? "bg-primary border-primary" : "border-border"}`}>
                                 {isSel && <CheckCircle className="w-3 h-3 text-primary-foreground" />}
                               </div>
                             ) : <div className="w-4 h-4 shrink-0" />}
-                            <div className="flex-1 min-w-0 space-y-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                {diff.now_closed && <ShieldAlert className="w-3.5 h-3.5 text-red-500 shrink-0" />}
-                                <span className={`text-sm font-medium ${diff.now_closed ? "text-red-400 line-through" : ""}`}>{diff.name}</span>
-                                {diff.now_closed && <span className="text-xs text-red-500 font-medium">CLOSED</span>}
-                                {isApplied && <span className="text-xs text-green-500 flex items-center gap-1"><CheckCircle className="w-3 h-3" />Applied</span>}
-                                {diff.yelp_url && <a href={diff.yelp_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-primary"><ExternalLink className="w-3 h-3" /></a>}
-                              </div>
-                              <p className="text-xs text-muted-foreground">{diff.neighborhood}</p>
-                              {hasChanges && !diff.now_closed && (
-                                <div className="flex flex-wrap gap-3 text-xs pt-1">
-                                  {ratingChange && <span>Rating: <DiffValue cur={ratingChange.old as number} next={ratingChange.new as number} /></span>}
-                                  {reviewChange && <span>Reviews: <DiffValue cur={reviewChange.old as number} next={reviewChange.new as number} fmt={(v) => Number(v).toLocaleString()} /></span>}
-                                  {tierChange && <span>Tier: <DiffValue cur={tierChange.old as string} next={tierChange.new as string} /></span>}
-                                </div>
-                              )}
-                              {diff.error && <p className="text-xs text-muted-foreground/60">{diff.error}</p>}
-                            </div>
-                          </div>
 
-                          {/* Desktop layout */}
-                          <div className="hidden md:grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto] gap-x-4 items-center">
-                            {hasChanges && !diff.now_closed && !isApplied ? (
-                              <div onClick={() => setSelectedSync((s) => { const n = new Set(s); isSel ? n.delete(diff.id) : n.add(diff.id); return n; })}
-                                className={`w-4 h-4 rounded border cursor-pointer flex items-center justify-center ${isSel ? "bg-primary border-primary" : "border-border"}`}>
-                                {isSel && <CheckCircle className="w-3 h-3 text-primary-foreground" />}
-                              </div>
-                            ) : <div className="w-4 h-4" />}
-
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                {diff.now_closed && <ShieldAlert className="w-3.5 h-3.5 text-red-500 shrink-0" />}
-                                <span className={`text-sm font-medium truncate ${diff.now_closed ? "line-through text-red-400" : ""}`}>{diff.name}</span>
-                                {diff.now_closed && <span className="text-xs text-red-500 font-medium shrink-0">CLOSED</span>}
-                                {isApplied && <span className="text-xs text-green-500 flex items-center gap-1 shrink-0"><CheckCircle className="w-3 h-3" />Applied</span>}
-                              </div>
-                              <p className="text-xs text-muted-foreground">{diff.neighborhood}{diff.error && ` · ${diff.error}`}</p>
-                            </div>
-
-                            <div className="text-sm text-right">
-                              {diff.yelp ? (
-                                <DiffValue
-                                  cur={diff.current.rating}
-                                  next={ratingChange ? (ratingChange.new as number) : diff.current.rating}
-                                />
-                              ) : <span className="text-muted-foreground/40">—</span>}
-                            </div>
-
-                            <div className="text-sm text-right">
-                              {diff.yelp ? (
-                                <DiffValue
-                                  cur={diff.current.review_count}
-                                  next={reviewChange ? (reviewChange.new as number) : diff.current.review_count}
-                                  fmt={(v) => Number(v).toLocaleString()}
-                                />
-                              ) : <span className="text-muted-foreground/40">—</span>}
-                            </div>
-
-                            <div className="text-sm text-right">
-                              {diff.yelp ? (
-                                <DiffValue
-                                  cur={diff.current.price_tier}
-                                  next={tierChange ? (tierChange.new as string) : diff.current.price_tier}
-                                />
-                              ) : <span className="text-muted-foreground/40">—</span>}
-                            </div>
-
-                            {/* Yelp categories */}
-                            <div className="text-xs text-muted-foreground flex flex-wrap gap-1">
-                              {diff.yelp?.categories?.map((cat) => (
-                                <span key={cat} className={`px-1.5 py-0.5 rounded border ${cat === "koreanbbq" ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 font-medium" : "bg-secondary border-border"}`}>
-                                  {cat}
+                            <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+                              {diff.now_closed && <ShieldAlert className="w-3.5 h-3.5 text-red-500 shrink-0" />}
+                              <span className={`text-sm font-semibold truncate ${diff.now_closed ? "line-through text-red-400" : ""}`}>
+                                {displayName}
+                              </span>
+                              {diff.now_closed && (
+                                <span className="text-xs font-semibold text-red-500 bg-red-500/10 border border-red-500/20 px-1.5 py-0.5 rounded shrink-0">
+                                  PERMANENTLY CLOSED
                                 </span>
-                              )) ?? <span className="text-muted-foreground/40">—</span>}
-                            </div>
-
-                            <div className="flex items-center gap-1 justify-end">
-                              {diff.yelp_url && (
-                                <a href={diff.yelp_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80">
-                                  <ExternalLink className="w-3.5 h-3.5" />
-                                </a>
+                              )}
+                              {isApplied && (
+                                <span className="text-xs text-green-500 flex items-center gap-1 shrink-0">
+                                  <CheckCircle className="w-3 h-3" /> Applied
+                                </span>
                               )}
                             </div>
+
+                            {diff.yelp_url && (
+                              <a href={diff.yelp_url} target="_blank" rel="noopener noreferrer"
+                                className="text-xs text-primary hover:underline flex items-center gap-1 shrink-0">
+                                Yelp <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
                           </div>
+
+                          {/* Row 2: neighborhood + Yelp categories */}
+                          {(diff.neighborhood || diff.yelp?.categories?.length) && (
+                            <div className="flex items-center gap-2 mt-1.5 ml-7 flex-wrap">
+                              {diff.neighborhood && (
+                                <span className="text-xs text-muted-foreground">{diff.neighborhood}</span>
+                              )}
+                              {diff.yelp?.categories?.length ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {diff.yelp.categories.map((cat) => (
+                                    <span key={cat} className={`text-xs px-1.5 py-0.5 rounded border ${
+                                      cat === "koreanbbq"
+                                        ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 font-medium"
+                                        : "bg-secondary border-border text-muted-foreground"
+                                    }`}>
+                                      {cat}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          )}
+
+                          {/* Row 3: changes as a vertical list */}
+                          {hasChanges && !diff.now_closed && (
+                            <ul className="mt-2 ml-7 space-y-1">
+                              {ratingChange && (
+                                <li className="flex items-center gap-2 text-sm">
+                                  <span className="text-muted-foreground w-16 shrink-0">Rating</span>
+                                  <DiffValue cur={ratingChange.old as number} next={ratingChange.new as number} />
+                                </li>
+                              )}
+                              {reviewChange && (
+                                <li className="flex items-center gap-2 text-sm">
+                                  <span className="text-muted-foreground w-16 shrink-0">Reviews</span>
+                                  <DiffValue cur={reviewChange.old as number} next={reviewChange.new as number} fmt={(v) => Number(v).toLocaleString()} />
+                                </li>
+                              )}
+                              {tierChange && (
+                                <li className="flex items-center gap-2 text-sm">
+                                  <span className="text-muted-foreground w-16 shrink-0">Price tier</span>
+                                  <DiffValue cur={tierChange.old as string} next={tierChange.new as string} />
+                                </li>
+                              )}
+                              {urlChange && (
+                                <li className="flex items-center gap-2 text-sm">
+                                  <span className="text-muted-foreground w-16 shrink-0">Yelp URL</span>
+                                  <span className="text-xs text-muted-foreground truncate max-w-[300px]">{urlChange.new as string}</span>
+                                </li>
+                              )}
+                            </ul>
+                          )}
+
+                          {/* Error / no-Yelp-data note */}
+                          {diff.error && (
+                            <p className="mt-1.5 ml-7 text-xs text-muted-foreground/60">{diff.error}</p>
+                          )}
                         </div>
                       );
                     })}
