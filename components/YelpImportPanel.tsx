@@ -66,7 +66,12 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
   const [fromCache, setFromCache] = useState(false);
   const [confFilter, setConfFilter] = useState<"high" | "medium" | "all">("high");
 
-  // ── Sync / Health check ─────────────────────────────────────────────────────
+  // ── Closure check ────────────────────────────────────────────────────────────
+  const [closureRunning, setClosureRunning] = useState(false);
+  const [closureResults, setClosureResults] = useState<RestaurantDiff[] | null>(null);
+  const [closureError, setClosureError] = useState("");
+
+  // ── Data sync ────────────────────────────────────────────────────────────────
   const [syncing, setSyncing] = useState(false);
   const [diffs, setDiffs] = useState<RestaurantDiff[] | null>(null);
   const [selectedSync, setSelectedSync] = useState<Set<string>>(new Set());
@@ -74,8 +79,7 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
   const [applyProgress, setApplyProgress] = useState<{ done: number; total: number } | null>(null);
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
   const [syncError, setSyncError] = useState("");
-  const [syncStats, setSyncStats] = useState<{ closedCount: number; changedCount: number; upToDateCount: number; errorCount: number } | null>(null);
-  const [syncFilter, setSyncFilter] = useState<"all" | "changed" | "closed">("all");
+  const [syncStats, setSyncStats] = useState<{ changedCount: number; upToDateCount: number; errorCount: number } | null>(null);
 
   // Load cached discover on mount
   useEffect(() => { loadDiscover(false); }, []); // eslint-disable-line
@@ -90,11 +94,6 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
   const trackedCandidates = candidates.filter((c) => c.already_tracked);
   const lowConfNew = newCandidates.filter((c) => c.kbbq_confidence === "low");
 
-  const filteredDiffs = diffs?.filter((d) =>
-    syncFilter === "all" ? true :
-    syncFilter === "closed" ? d.now_closed :
-    d.changes.length > 0 // "changed" includes closed too
-  ) ?? [];
   const diffsWithChanges = diffs?.filter((d) => d.changes.length > 0) ?? [];
 
   // ── Discover actions ────────────────────────────────────────────────────────
@@ -175,7 +174,28 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
     }
   }
 
-  // ── Sync actions ─────────────────────────────────────────────────────────────
+  // ── Closure check action ──────────────────────────────────────────────────────
+  async function runClosureCheck() {
+    setClosureRunning(true);
+    setClosureError("");
+    setClosureResults(null);
+    try {
+      const res = await fetch("/api/restaurants/yelp-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ mode: "closed" }),
+      });
+      const text = await res.text();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: any;
+      try { data = JSON.parse(text); } catch { throw new Error(text || `HTTP ${res.status}`); }
+      if (!res.ok || data.error) throw new Error((data.error as string) ?? `HTTP ${res.status}`);
+      setClosureResults(data.results ?? []);
+    } catch (e) { setClosureError(String(e)); }
+    setClosureRunning(false);
+  }
+
+  // ── Data sync action ──────────────────────────────────────────────────────────
   async function runSync() {
     setSyncing(true);
     setSyncError("");
@@ -187,7 +207,7 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
       const res = await fetch("/api/restaurants/yelp-check", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ mode: "updates" }),
       });
       const text = await res.text();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -196,12 +216,12 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
       if (!res.ok || data.error) throw new Error((data.error as string) ?? `HTTP ${res.status}`);
       setDiffs(data.results ?? []);
       setSyncStats({
-        closedCount: data.closedCount, changedCount: data.changedCount,
-        upToDateCount: data.upToDateCount, errorCount: data.errorCount,
+        changedCount: data.changedCount,
+        upToDateCount: data.upToDateCount,
+        errorCount: data.errorCount,
       });
-      // Auto-select all changed (non-closed) rows
       const autoSel = new Set<string>(
-        (data.results as RestaurantDiff[]).filter((d) => d.changes.length > 0 && !d.now_closed).map((d) => d.id)
+        (data.results as RestaurantDiff[]).filter((d) => d.changes.length > 0).map((d) => d.id)
       );
       setSelectedSync(autoSel);
     } catch (e) { setSyncError(String(e)); }
@@ -255,6 +275,7 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
 
   const syncAllChangedCount = diffsWithChanges.filter((d) => !appliedIds.has(d.id)).length;
   const selectedNotApplied = [...selectedSync].filter((id) => !appliedIds.has(id)).length;
+  const pendingSyncBadge = diffsWithChanges.length - appliedIds.size;
 
   return (
     <div className="space-y-4">
@@ -264,9 +285,9 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
           <button key={tab} onClick={() => setSubTab(tab as SubTab)}
             className={`px-4 py-2 transition-colors ${subTab === tab ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-foreground/5"}`}>
             {label}
-            {tab === "sync" && diffs && diffsWithChanges.length > 0 && (
+            {tab === "sync" && pendingSyncBadge > 0 && (
               <span className="ml-1.5 px-1.5 py-0.5 text-xs rounded-full bg-yellow-500/20 text-yellow-600 dark:text-yellow-400">
-                {diffsWithChanges.length - appliedIds.size}
+                {pendingSyncBadge}
               </span>
             )}
           </button>
@@ -444,125 +465,141 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
 
       {/* ══════════════════════════════════════════════════════════════ SYNC */}
       {subTab === "sync" && (
-        <div className="space-y-4">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <p className="text-sm text-muted-foreground">
-                Fetches current Yelp data for every tracked restaurant. Review the diffs, select which updates to apply, then apply in bulk.
-              </p>
-              {diffs && (
-                <p className="text-xs text-muted-foreground/70 mt-0.5">
-                  Last checked: {new Date().toLocaleString()}
+        <div className="space-y-6">
+
+          {/* ── Section 1: Closure check ─────────────────────────────────── */}
+          <div className="rounded-xl border border-border p-4 space-y-3">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <h3 className="text-sm font-semibold">Check for Closed Restaurants</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Checks every tracked restaurant against Yelp and lists any that are permanently closed.
                 </p>
-              )}
+              </div>
+              <button onClick={runClosureCheck} disabled={closureRunning}
+                className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 text-red-500 border border-red-500/20 text-sm font-medium rounded-lg hover:bg-red-500/20 disabled:opacity-50 shrink-0 transition-colors">
+                <RefreshCw className={`w-4 h-4 ${closureRunning ? "animate-spin" : ""}`} />
+                {closureRunning ? "Checking…" : closureResults ? "Re-check" : "Check Closures"}
+              </button>
             </div>
-            <button onClick={runSync} disabled={syncing}
-              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 shrink-0">
-              <RefreshCw className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} />
-              {syncing ? "Checking Yelp…" : diffs ? "Re-check All" : "Check All Restaurants"}
-            </button>
+
+            {closureError && <ErrorBox msg={closureError} />}
+            {closureRunning && <LoadingSpinner label="Checking each restaurant on Yelp… takes 1–2 min" />}
+
+            {closureResults && !closureRunning && (
+              closureResults.length === 0 ? (
+                <div className="flex items-center gap-2 text-sm text-green-500">
+                  <CheckCircle className="w-4 h-4" /> All {`restaurants are still open on Yelp.`}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-red-500">{closureResults.length} permanently closed</p>
+                  {closureResults.map((diff) => {
+                    const displayName = diff.name || diff.yelp_id || diff.yelp_url?.match(/yelp\.com\/biz\/([^?#/]+)/)?.[1] || "Unknown restaurant";
+                    return (
+                      <div key={diff.id} className="flex items-center gap-3 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5">
+                        <ShieldAlert className="w-4 h-4 text-red-500 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium line-through text-red-400">{displayName}</span>
+                          {diff.neighborhood && <span className="text-xs text-muted-foreground ml-2">{diff.neighborhood}</span>}
+                        </div>
+                        {diff.yelp_url && (
+                          <a href={diff.yelp_url} target="_blank" rel="noopener noreferrer"
+                            className="text-xs text-primary hover:underline flex items-center gap-1 shrink-0">
+                            Yelp <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            )}
           </div>
 
-          {syncError && <ErrorBox msg={syncError} />}
-          {syncing && <LoadingSpinner label="Fetching each restaurant from Yelp (~1/sec to stay within rate limits)… takes 1–3 min" />}
-
-          {diffs && !syncing && (
-            <>
-              {/* Stats */}
-              <div className="flex flex-wrap gap-2 text-sm">
-                {syncStats?.closedCount ? (
-                  <span className="px-3 py-1.5 bg-red-500/10 text-red-500 rounded-lg border border-red-500/20 font-medium">
-                    {syncStats.closedCount} permanently closed
-                  </span>
-                ) : null}
-                {syncStats?.changedCount ? (
-                  <span className="px-3 py-1.5 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 rounded-lg border border-yellow-500/20 font-medium">
-                    {syncStats.changedCount} have updates
-                  </span>
-                ) : null}
-                {syncStats?.upToDateCount ? (
-                  <span className="px-3 py-1.5 bg-green-500/10 text-green-600 dark:text-green-400 rounded-lg border border-green-500/20">
-                    {syncStats.upToDateCount} up to date
-                  </span>
-                ) : null}
-                {syncStats?.errorCount ? (
-                  <span className="px-3 py-1.5 bg-secondary text-muted-foreground rounded-lg border border-border">
-                    {syncStats.errorCount} no Yelp ID
-                  </span>
-                ) : null}
+          {/* ── Section 2: Data sync ──────────────────────────────────────── */}
+          <div className="rounded-xl border border-border p-4 space-y-3">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <h3 className="text-sm font-semibold">Sync Live Data from Yelp</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Updates review counts, price tiers, and Yelp URLs.{" "}
+                  <span className="italic">Note: API ratings may differ slightly from website display.</span>
+                </p>
               </div>
+              <button onClick={runSync} disabled={syncing}
+                className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 shrink-0 transition-colors">
+                <RefreshCw className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} />
+                {syncing ? "Syncing…" : diffs ? "Re-sync" : "Sync Data"}
+              </button>
+            </div>
 
-              {/* Filter + bulk controls */}
-              {diffs && diffs.length > 0 && (
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                  <div className="flex gap-2 text-xs">
-                    {([["changed", "Changes only"], ["closed", "Closed only"], ["all", "All restaurants"]] as const).map(([v, label]) => (
-                      <button key={v} onClick={() => setSyncFilter(v)}
-                        className={`px-2.5 py-1 rounded-md border transition-colors ${syncFilter === v ? "bg-primary/15 border-primary/40 text-primary" : "border-border text-muted-foreground"}`}>
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+            {syncError && <ErrorBox msg={syncError} />}
+            {syncing && <LoadingSpinner label="Fetching each restaurant from Yelp (~1/sec)… takes 1–3 min" />}
 
+            {diffs && !syncing && (
+              <>
+                {/* Stats */}
+                <div className="flex flex-wrap gap-2 text-xs">
+                  {syncStats?.changedCount ? (
+                    <span className="px-2.5 py-1 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 rounded-lg border border-yellow-500/20 font-medium">
+                      {syncStats.changedCount} have updates
+                    </span>
+                  ) : null}
+                  {syncStats?.upToDateCount ? (
+                    <span className="px-2.5 py-1 bg-green-500/10 text-green-600 dark:text-green-400 rounded-lg border border-green-500/20">
+                      {syncStats.upToDateCount} up to date
+                    </span>
+                  ) : null}
+                  {syncStats?.errorCount ? (
+                    <span className="px-2.5 py-1 bg-secondary text-muted-foreground rounded-lg border border-border">
+                      {syncStats.errorCount} no Yelp ID
+                    </span>
+                  ) : null}
+                </div>
+
+                {/* Select controls */}
+                {diffsWithChanges.length > 0 && (
                   <div className="flex items-center gap-2 text-xs">
-                    <button onClick={() => setSelectedSync(new Set(diffsWithChanges.filter((d) => !d.now_closed && !appliedIds.has(d.id)).map((d) => d.id)))}
-                      className="text-primary hover:underline">Select all changes</button>
+                    <button onClick={() => setSelectedSync(new Set(diffsWithChanges.filter((d) => !appliedIds.has(d.id)).map((d) => d.id)))}
+                      className="text-primary hover:underline">Select all {syncAllChangedCount}</button>
                     <span className="text-muted-foreground">·</span>
                     <button onClick={() => setSelectedSync(new Set())} className="text-muted-foreground hover:text-foreground">None</button>
                     <span className="text-muted-foreground">· {selectedNotApplied} selected</span>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Diff list — vertical card-per-restaurant layout */}
-              {filteredDiffs.length > 0 ? (
-                <>
+                {/* Diff cards — only changed restaurants */}
+                {diffsWithChanges.length > 0 ? (
                   <div className="space-y-2">
-                    {filteredDiffs.map((diff) => {
-                      const hasChanges = diff.changes.length > 0;
+                    {diffsWithChanges.map((diff) => {
                       const isApplied = appliedIds.has(diff.id);
                       const isSel = selectedSync.has(diff.id);
                       const ratingChange = diff.changes.find((c) => c.field === "yelp_rating");
                       const reviewChange = diff.changes.find((c) => c.field === "review_count");
                       const tierChange = diff.changes.find((c) => c.field === "price_tier");
                       const urlChange = diff.changes.find((c) => c.field === "yelp_url");
-                      // Fallback: if name is blank use yelp_id then URL slug
                       const displayName = diff.name || diff.yelp_id || diff.yelp_url?.match(/yelp\.com\/biz\/([^?#/]+)/)?.[1] || "Unknown restaurant";
 
                       return (
                         <div key={diff.id}
                           className={`rounded-xl border px-4 py-3 transition-colors ${
-                            diff.now_closed ? "border-red-500/30 bg-red-500/5" :
                             isApplied ? "border-green-500/20 bg-green-500/5 opacity-70" :
-                            hasChanges && isSel ? "border-primary/30 bg-primary/5" :
-                            hasChanges ? "border-yellow-500/20 bg-yellow-500/5" :
-                            "border-border bg-card/50"
+                            isSel ? "border-primary/30 bg-primary/5" :
+                            "border-yellow-500/20 bg-yellow-500/5"
                           }`}>
-
-                          {/* Row 1: checkbox + name + badges + Yelp link */}
                           <div className="flex items-center gap-3">
-                            {hasChanges && !diff.now_closed && !isApplied ? (
+                            {!isApplied ? (
                               <div onClick={() => setSelectedSync((s) => { const n = new Set(s); isSel ? n.delete(diff.id) : n.add(diff.id); return n; })}
                                 className={`w-4 h-4 rounded border shrink-0 cursor-pointer flex items-center justify-center ${isSel ? "bg-primary border-primary" : "border-border"}`}>
                                 {isSel && <CheckCircle className="w-3 h-3 text-primary-foreground" />}
                               </div>
-                            ) : <div className="w-4 h-4 shrink-0" />}
+                            ) : <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />}
 
-                            <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
-                              {diff.now_closed && <ShieldAlert className="w-3.5 h-3.5 text-red-500 shrink-0" />}
-                              <span className={`text-sm font-semibold truncate ${diff.now_closed ? "line-through text-red-400" : ""}`}>
-                                {displayName}
-                              </span>
-                              {diff.now_closed && (
-                                <span className="text-xs font-semibold text-red-500 bg-red-500/10 border border-red-500/20 px-1.5 py-0.5 rounded shrink-0">
-                                  PERMANENTLY CLOSED
-                                </span>
-                              )}
-                              {isApplied && (
-                                <span className="text-xs text-green-500 flex items-center gap-1 shrink-0">
-                                  <CheckCircle className="w-3 h-3" /> Applied
-                                </span>
-                              )}
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <span className="text-sm font-semibold truncate">{displayName}</span>
+                              {diff.neighborhood && <span className="text-xs text-muted-foreground shrink-0">{diff.neighborhood}</span>}
+                              {isApplied && <span className="text-xs text-green-500 shrink-0">Applied</span>}
                             </div>
 
                             {diff.yelp_url && (
@@ -573,103 +610,79 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
                             )}
                           </div>
 
-                          {/* Row 2: neighborhood + Yelp categories */}
-                          {(diff.neighborhood || diff.yelp?.categories?.length) && (
-                            <div className="flex items-center gap-2 mt-1.5 ml-7 flex-wrap">
-                              {diff.neighborhood && (
-                                <span className="text-xs text-muted-foreground">{diff.neighborhood}</span>
-                              )}
-                              {diff.yelp?.categories?.length ? (
+                          <ul className="mt-2 ml-7 space-y-1">
+                            {ratingChange && (
+                              <li className="flex items-center gap-2 text-sm">
+                                <span className="text-muted-foreground w-20 shrink-0">Rating</span>
+                                <DiffValue cur={ratingChange.old as number} next={ratingChange.new as number} />
+                              </li>
+                            )}
+                            {reviewChange && (
+                              <li className="flex items-center gap-2 text-sm">
+                                <span className="text-muted-foreground w-20 shrink-0">Reviews</span>
+                                <DiffValue cur={reviewChange.old as number} next={reviewChange.new as number} fmt={(v) => Number(v).toLocaleString()} />
+                              </li>
+                            )}
+                            {tierChange && (
+                              <li className="flex items-center gap-2 text-sm">
+                                <span className="text-muted-foreground w-20 shrink-0">Price tier</span>
+                                <DiffValue cur={tierChange.old as string} next={tierChange.new as string} />
+                              </li>
+                            )}
+                            {urlChange && (
+                              <li className="flex items-center gap-2 text-sm">
+                                <span className="text-muted-foreground w-20 shrink-0">Yelp URL</span>
+                                <span className="text-xs text-muted-foreground truncate max-w-xs">{urlChange.new as string}</span>
+                              </li>
+                            )}
+                            {diff.yelp?.categories?.length ? (
+                              <li className="flex items-start gap-2 text-sm">
+                                <span className="text-muted-foreground w-20 shrink-0">Categories</span>
                                 <div className="flex flex-wrap gap-1">
                                   {diff.yelp.categories.map((cat) => (
                                     <span key={cat} className={`text-xs px-1.5 py-0.5 rounded border ${
                                       cat === "koreanbbq"
                                         ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 font-medium"
                                         : "bg-secondary border-border text-muted-foreground"
-                                    }`}>
-                                      {cat}
-                                    </span>
+                                    }`}>{cat}</span>
                                   ))}
                                 </div>
-                              ) : null}
-                            </div>
-                          )}
+                              </li>
+                            ) : null}
+                          </ul>
 
-                          {/* Row 3: changes as a vertical list */}
-                          {hasChanges && !diff.now_closed && (
-                            <ul className="mt-2 ml-7 space-y-1">
-                              {ratingChange && (
-                                <li className="flex items-center gap-2 text-sm">
-                                  <span className="text-muted-foreground w-16 shrink-0">Rating</span>
-                                  <DiffValue cur={ratingChange.old as number} next={ratingChange.new as number} />
-                                </li>
-                              )}
-                              {reviewChange && (
-                                <li className="flex items-center gap-2 text-sm">
-                                  <span className="text-muted-foreground w-16 shrink-0">Reviews</span>
-                                  <DiffValue cur={reviewChange.old as number} next={reviewChange.new as number} fmt={(v) => Number(v).toLocaleString()} />
-                                </li>
-                              )}
-                              {tierChange && (
-                                <li className="flex items-center gap-2 text-sm">
-                                  <span className="text-muted-foreground w-16 shrink-0">Price tier</span>
-                                  <DiffValue cur={tierChange.old as string} next={tierChange.new as string} />
-                                </li>
-                              )}
-                              {urlChange && (
-                                <li className="flex items-center gap-2 text-sm">
-                                  <span className="text-muted-foreground w-16 shrink-0">Yelp URL</span>
-                                  <span className="text-xs text-muted-foreground truncate max-w-[300px]">{urlChange.new as string}</span>
-                                </li>
-                              )}
-                            </ul>
-                          )}
-
-                          {/* Error / no-Yelp-data note */}
-                          {diff.error && (
-                            <p className="mt-1.5 ml-7 text-xs text-muted-foreground/60">{diff.error}</p>
-                          )}
+                          {diff.error && <p className="mt-1.5 ml-7 text-xs text-muted-foreground/60">{diff.error}</p>}
                         </div>
                       );
                     })}
                   </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">✓ All data is up to date.</p>
+                )}
 
-                  {/* Bulk apply bar */}
-                  {diffsWithChanges.length > 0 && (
-                    <div className="sticky bottom-0 bg-card/95 backdrop-blur border-t border-border -mx-0 px-0 py-3 flex items-center justify-between gap-4 flex-wrap">
-                      {applyProgress && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground flex-1">
-                          <div className="flex-1 h-1.5 bg-border rounded-full overflow-hidden max-w-40">
-                            <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${(applyProgress.done / applyProgress.total) * 100}%` }} />
-                          </div>
-                          {applyProgress.done}/{applyProgress.total} updated
+                {/* Apply bar */}
+                {diffsWithChanges.length > 0 && (
+                  <div className="sticky bottom-0 bg-card/95 backdrop-blur border-t border-border pt-3 flex items-center justify-between gap-4 flex-wrap">
+                    {applyProgress && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground flex-1">
+                        <div className="flex-1 h-1.5 bg-border rounded-full overflow-hidden max-w-40">
+                          <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${(applyProgress.done / applyProgress.total) * 100}%` }} />
                         </div>
-                      )}
-                      {!applyProgress && <div className="flex-1" />}
-                      <div className="flex gap-2 shrink-0">
-                        {syncAllChangedCount > 0 && (
-                          <button onClick={() => {
-                            setSelectedSync(new Set(diffsWithChanges.filter((d) => !d.now_closed && !appliedIds.has(d.id)).map((d) => d.id)));
-                          }} className="text-xs px-3 py-1.5 border border-border rounded-lg text-muted-foreground hover:text-foreground">
-                            Select all {syncAllChangedCount}
-                          </button>
-                        )}
-                        <button onClick={applySelected} disabled={applying || selectedNotApplied === 0}
-                          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50">
-                          <CheckCircle className="w-4 h-4" />
-                          {applying ? `Applying… ${applyProgress?.done ?? 0}/${applyProgress?.total ?? 0}` : `Apply ${selectedNotApplied} update${selectedNotApplied !== 1 ? "s" : ""}`}
-                        </button>
+                        {applyProgress.done}/{applyProgress.total} updated
                       </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  {syncFilter === "changed" ? "✓ All restaurants are up to date on Yelp." : "No results for this filter."}
-                </p>
-              )}
-            </>
-          )}
+                    )}
+                    {!applyProgress && <div className="flex-1" />}
+                    <button onClick={applySelected} disabled={applying || selectedNotApplied === 0}
+                      className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 shrink-0">
+                      <CheckCircle className="w-4 h-4" />
+                      {applying ? `Applying… ${applyProgress?.done ?? 0}/${applyProgress?.total ?? 0}` : `Apply ${selectedNotApplied} update${selectedNotApplied !== 1 ? "s" : ""}`}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
         </div>
       )}
     </div>
