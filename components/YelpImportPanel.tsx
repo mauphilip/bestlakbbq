@@ -106,7 +106,8 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
         headers: { Authorization: `Bearer ${token}` },
       });
       const text = await res.text();
-      let data: Record<string, unknown>;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: any;
       try { data = JSON.parse(text); } catch { throw new Error(text || `HTTP ${res.status}`); }
       if (!res.ok || data.error) throw new Error((data.error as string) ?? `HTTP ${res.status}`);
       const cands: DiscoverCandidate[] = data.candidates ?? [];
@@ -132,7 +133,7 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
         const r: Restaurant = {
           id: c.id!, name: c.name!, neighborhood: c.neighborhood!,
           ayce: false, ayce_tiers: [], non_ayce_est_per_person: null,
-          price_tier: c.price_tier, price_verified: false,
+          price_tier: c.price_tier as import("@/lib/types").PriceTier | undefined, price_verified: false,
           yelp_id: c.yelp_id, yelp_rating: c.yelp_rating ?? 0,
           google_rating: 0, review_count: c.review_count ?? 0,
           lat: c.lat ?? 34.05, lng: c.lng ?? -118.3,
@@ -174,7 +175,8 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
         body: JSON.stringify({}),
       });
       const text = await res.text();
-      let data: Record<string, unknown>;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: any;
       try { data = JSON.parse(text); } catch { throw new Error(text || `HTTP ${res.status}`); }
       if (!res.ok || data.error) throw new Error((data.error as string) ?? `HTTP ${res.status}`);
       setDiffs(data.results ?? []);
