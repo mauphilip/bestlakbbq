@@ -61,7 +61,7 @@ function buildKnownSet(restaurants: Restaurant[]) {
       const m = r.yelp_url.match(/yelp\.com\/biz\/([^?#/]+)/);
       if (m) slugs.add(m[1]);
     }
-    names.add(r.name.toLowerCase().trim());
+    if (r.name) names.add(r.name.toLowerCase().trim());
   }
   return { ids, slugs, names };
 }
@@ -133,7 +133,7 @@ function bizToCandidate(biz: YelpBiz, known: ReturnType<typeof buildKnownSet>): 
   const alreadyTracked =
     known.ids.has(biz.id) ||
     (slug ? known.slugs.has(slug) : false) ||
-    known.names.has(biz.name.toLowerCase().trim());
+    (biz.name ? known.names.has(biz.name.toLowerCase().trim()) : false);
 
   return {
     id: slug || biz.id,
