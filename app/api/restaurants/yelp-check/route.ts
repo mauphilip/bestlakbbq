@@ -109,7 +109,7 @@ async function checkAll(restaurants: Restaurant[]): Promise<RestaurantDiff[]> {
     if (a.now_closed !== b.now_closed) return a.now_closed ? -1 : 1;
     if ((a.changes.length > 0) !== (b.changes.length > 0)) return a.changes.length > 0 ? -1 : 1;
     if (!!a.error !== !!b.error) return a.error ? 1 : -1;
-    return a.name.localeCompare(b.name);
+    return (a.name ?? "").localeCompare(b.name ?? "");
   });
 
   return results;
