@@ -7,7 +7,7 @@ import { ExternalLink, ArrowUpDown } from "lucide-react";
 
 type SortKey = "cost" | "rating" | "value" | "reviews";
 
-const NEIGHBORHOODS = ["All", "Koreatown", "Mid-Wilshire", "Orange County", "SGV", "Gardena", "Glendale", "Torrance", "Rowland Heights"];
+const NEIGHBORHOODS = ["All", "Koreatown", "Mid-Wilshire", "Orange County", "SGV", "Gardena", "Glendale", "Torrance", "Rowland Heights", "Van Nuys"];
 
 function getMinCost(r: Restaurant): number {
   if (r.ayce) return Math.min(...r.ayce_tiers.map((t) => t.price));

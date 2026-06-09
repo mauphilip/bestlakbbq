@@ -98,7 +98,7 @@ export default function Home() {
         </div>
 
         <p className="text-xs text-muted-foreground mt-4 text-center">
-          🟠 circles = AYCE · 🔵 triangles = Non-AYCE ·{" "}
+          ● circle = AYCE · ▲ triangle = Non-AYCE · color = cost tier ·{" "}
           <a href="/list" className="hover:text-foreground transition-colors underline underline-offset-2">
             View as list →
           </a>

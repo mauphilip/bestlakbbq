@@ -12,7 +12,7 @@ import { useTheme } from "@/components/ThemeProvider";
 type Props = { restaurants: Restaurant[] };
 
 /** Restaurants above this cost are shown in a separate "Price Outliers" panel */
-const OUTLIER_THRESHOLD = 60;
+const OUTLIER_THRESHOLD = 65;
 
 interface ChartPoint {
   x: number; // rating
@@ -116,23 +116,34 @@ function DotWithLabel(props: {
   );
 
   const labelVisible = showLabels && opacity > 0.3;
-  const fontSize = isFullscreen ? 12 : 10;
-  const labelFill = isDark
-    ? `rgba(255,255,255,${Math.min(opacity, 0.75)})`
-    : `rgba(0,0,0,${Math.min(opacity, 0.65)})`;
+  const fontSize = isFullscreen ? 13 : 11;
+  // Halo stroke so text is legible over any bubble color or dark background
+  const haloColor = isDark ? "rgba(0,0,0,0.85)" : "rgba(255,255,255,0.95)";
+  const textColor = isDark
+    ? `rgba(255,255,255,${Math.min(opacity, 0.92)})`
+    : `rgba(0,0,0,${Math.min(opacity, 0.80)})`;
+  const maxLen = isFullscreen ? 28 : 22;
+  const label = restaurant.name.length > maxLen
+    ? restaurant.name.slice(0, maxLen - 1) + "…"
+    : restaurant.name;
 
   return (
     <g>
       {shape}
       {labelVisible && (
         <text
-          x={cx + r + 3}
-          y={cy + 3}
+          x={cx + r + 5}
+          y={cy + 4}
           fontSize={fontSize}
-          fill={labelFill}
+          fontFamily="system-ui, -apple-system, sans-serif"
+          fill={textColor}
+          stroke={haloColor}
+          strokeWidth={3}
+          strokeLinejoin="round"
+          paintOrder="stroke"
           style={{ pointerEvents: "none", userSelect: "none" }}
         >
-          {restaurant.name.length > 18 ? restaurant.name.slice(0, 16) + "…" : restaurant.name}
+          {label}
         </text>
       )}
     </g>
@@ -149,15 +160,15 @@ function ChartInner({
 }) {
   const ayceData = data.filter((d) => d.isAyce);
   const nonAyceData = data.filter((d) => !d.isAyce);
-  const tickFill = isDark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.45)";
-  const gridStroke = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.06)";
-  const refLineStroke = isDark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.3)";
-  const refLabelFill = isDark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.5)";
-  const cursorStroke = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
+  const tickFill = isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.55)";
+  const gridStroke = isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.09)";
+  const refLineStroke = isDark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.35)";
+  const refLabelFill = isDark ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.55)";
+  const cursorStroke = isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <ScatterChart margin={{ top: 24, right: isFullscreen ? 48 : 32, bottom: 52, left: isFullscreen ? 16 : 12 }}>
+      <ScatterChart margin={{ top: 24, right: isFullscreen ? 120 : 100, bottom: 52, left: isFullscreen ? 16 : 12 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
         <XAxis
           dataKey="x"
@@ -265,7 +276,8 @@ export default function KBBQChart({ restaurants }: Props) {
         ? Math.min(...r.ayce_tiers.map((t) => t.price))
         : (r.non_ayce_est_per_person ?? 0);
       const rating = r.yelp_rating;
-      const bubbleR = 5 + (r.review_count / maxReviews) * 16;
+      // sqrt scaling so review-count disparity doesn't dominate bubble size
+      const bubbleR = 5 + Math.sqrt(r.review_count / maxReviews) * 16;
       const color = costColor(cost);
       const matchesSearch = !q || r.name.toLowerCase().includes(q) || r.neighborhood.toLowerCase().includes(q);
       const opacity = q ? (matchesSearch ? 1 : 0.12) : 1;
@@ -298,9 +310,9 @@ export default function KBBQChart({ restaurants }: Props) {
 
   const yDomain: [number, number] = data.length
     ? [
-        Math.floor(Math.min(...data.map((d) => d.y)) / 5) * 5 - 2,
+        Math.floor(Math.min(...data.map((d) => d.y)) / 5) * 5 - 4,
         Math.min(
-          Math.ceil(Math.max(...data.map((d) => d.y)) / 5) * 5 + 2,
+          Math.ceil(Math.max(...data.map((d) => d.y)) / 5) * 5 + 5,
           OUTLIER_THRESHOLD
         ),
       ]
@@ -367,7 +379,7 @@ export default function KBBQChart({ restaurants }: Props) {
       {controls}
 
       {/* Chart */}
-      <div className="w-full h-[680px] bg-card/50 rounded-xl border border-border p-3">
+      <div className="w-full h-[760px] bg-card/50 rounded-xl border border-border p-3">
         {chartContent}
       </div>
 
