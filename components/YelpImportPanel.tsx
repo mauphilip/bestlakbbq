@@ -70,6 +70,9 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
   const [closureRunning, setClosureRunning] = useState(false);
   const [closureResults, setClosureResults] = useState<RestaurantDiff[] | null>(null);
   const [closureError, setClosureError] = useState("");
+  const [closureSelected, setClosureSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
 
   // ── Data sync ────────────────────────────────────────────────────────────────
   const [syncing, setSyncing] = useState(false);
@@ -80,6 +83,14 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
   const [syncError, setSyncError] = useState("");
   const [syncStats, setSyncStats] = useState<{ changedCount: number; upToDateCount: number; errorCount: number } | null>(null);
+
+  // All restaurants (for KV-managed check)
+  const [allRestaurants, setAllRestaurants] = useState<Restaurant[]>([]);
+  useEffect(() => {
+    fetch("/api/restaurants").then((r) => r.json()).then((d) => {
+      if (Array.isArray(d)) setAllRestaurants(d);
+    }).catch(() => {});
+  }, []);
 
   // Load cached discover on mount
   useEffect(() => { loadDiscover(false); }, []); // eslint-disable-line
@@ -179,6 +190,8 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
     setClosureRunning(true);
     setClosureError("");
     setClosureResults(null);
+    setClosureSelected(new Set());
+    setDeletedIds(new Set());
     try {
       const res = await fetch("/api/restaurants/yelp-check", {
         method: "POST",
@@ -190,9 +203,34 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
       let data: any;
       try { data = JSON.parse(text); } catch { throw new Error(text || `HTTP ${res.status}`); }
       if (!res.ok || data.error) throw new Error((data.error as string) ?? `HTTP ${res.status}`);
-      setClosureResults(data.results ?? []);
+      const results: RestaurantDiff[] = data.results ?? [];
+      setClosureResults(results);
+      // Pre-select all KV-managed (deletable) closed restaurants
+      // We'll know which are KV by fetching the full list
+      const allRes = await fetch("/api/restaurants").then((r) => r.json()).catch(() => []);
+      const kvIds = new Set<string>((allRes as Restaurant[]).filter((r) => r.kv_managed).map((r) => r.id));
+      setClosureSelected(new Set(results.filter((r) => kvIds.has(r.id)).map((r) => r.id)));
     } catch (e) { setClosureError(String(e)); }
     setClosureRunning(false);
+  }
+
+  async function deleteClosureSelected(allRestaurants: Restaurant[]) {
+    const toDelete = [...closureSelected].filter((id) => !deletedIds.has(id));
+    if (!toDelete.length) return;
+    setDeleting(true);
+    for (const id of toDelete) {
+      const r = allRestaurants.find((x) => x.id === id);
+      if (!r?.kv_managed) continue; // base JSON — can't delete from UI
+      try {
+        await fetch(`/api/restaurants/${id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setDeletedIds((s) => new Set(s).add(id));
+      } catch { /* ignore */ }
+    }
+    setDeleting(false);
+    onUpdated?.();
   }
 
   // ── Data sync action ──────────────────────────────────────────────────────────
@@ -491,29 +529,85 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
                 <div className="flex items-center gap-2 text-sm text-green-500">
                   <CheckCircle className="w-4 h-4" /> All {`restaurants are still open on Yelp.`}
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-red-500">{closureResults.length} permanently closed</p>
-                  {closureResults.map((diff) => {
-                    const displayName = diff.name || diff.yelp_id || diff.yelp_url?.match(/yelp\.com\/biz\/([^?#/]+)/)?.[1] || "Unknown restaurant";
-                    return (
-                      <div key={diff.id} className="flex items-center gap-3 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5">
-                        <ShieldAlert className="w-4 h-4 text-red-500 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <span className="text-sm font-medium line-through text-red-400">{displayName}</span>
-                          {diff.neighborhood && <span className="text-xs text-muted-foreground ml-2">{diff.neighborhood}</span>}
-                        </div>
-                        {diff.yelp_url && (
-                          <a href={diff.yelp_url} target="_blank" rel="noopener noreferrer"
-                            className="text-xs text-primary hover:underline flex items-center gap-1 shrink-0">
-                            Yelp <ExternalLink className="w-3 h-3" />
-                          </a>
+              ) : (() => {
+                  const kvIds = new Set(allRestaurants.filter((r) => r.kv_managed).map((r) => r.id));
+                  const visible = closureResults.filter((d) => !deletedIds.has(d.id));
+                  const selectableIds = visible.filter((d) => kvIds.has(d.id)).map((d) => d.id);
+                  const baseJsonClosed = visible.filter((d) => !kvIds.has(d.id));
+                  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => closureSelected.has(id));
+
+                  return (
+                    <div className="space-y-3">
+                      {/* Header + select all */}
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <p className="text-xs font-medium text-red-500">{visible.length} permanently closed</p>
+                        {selectableIds.length > 0 && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <button onClick={() => setClosureSelected(allSelected ? new Set() : new Set(selectableIds))}
+                              className="text-primary hover:underline">{allSelected ? "Deselect all" : `Select all ${selectableIds.length}`}</button>
+                            <span className="text-muted-foreground">· {closureSelected.size} selected</span>
+                          </div>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-              )
+
+                      {/* Closed restaurant rows */}
+                      <div className="space-y-1.5">
+                        {visible.map((diff) => {
+                          const displayName = diff.name || diff.yelp_id || diff.yelp_url?.match(/yelp\.com\/biz\/([^?#/]+)/)?.[1] || "Unknown restaurant";
+                          const isKv = kvIds.has(diff.id);
+                          const isSel = closureSelected.has(diff.id);
+
+                          return (
+                            <div key={diff.id} className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 ${
+                              isKv ? "border-red-500/20 bg-red-500/5" : "border-border bg-card/50 opacity-70"
+                            }`}>
+                              {isKv ? (
+                                <div onClick={() => setClosureSelected((s) => { const n = new Set(s); isSel ? n.delete(diff.id) : n.add(diff.id); return n; })}
+                                  className={`w-4 h-4 rounded border shrink-0 cursor-pointer flex items-center justify-center ${isSel ? "bg-red-500 border-red-500" : "border-border"}`}>
+                                  {isSel && <CheckCircle className="w-3 h-3 text-white" />}
+                                </div>
+                              ) : (
+                                <ShieldAlert className="w-4 h-4 text-muted-foreground shrink-0" />
+                              )}
+
+                              <div className="flex-1 min-w-0">
+                                <span className="text-sm font-medium line-through text-red-400">{displayName}</span>
+                                {diff.neighborhood && <span className="text-xs text-muted-foreground ml-2">{diff.neighborhood}</span>}
+                                {!isKv && <span className="text-xs text-muted-foreground ml-2 italic">(base JSON — remove manually)</span>}
+                              </div>
+
+                              {diff.yelp_url && (
+                                <a href={diff.yelp_url} target="_blank" rel="noopener noreferrer"
+                                  className="text-xs text-primary hover:underline flex items-center gap-1 shrink-0">
+                                  Yelp <ExternalLink className="w-3 h-3" />
+                                </a>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Base JSON note */}
+                      {baseJsonClosed.length > 0 && (
+                        <p className="text-xs text-muted-foreground/70 italic">
+                          {baseJsonClosed.length} restaurant{baseJsonClosed.length !== 1 ? "s are" : " is"} in base JSON and must be removed from <code className="text-xs bg-secondary px-1 rounded">data/restaurants.json</code> manually.
+                        </p>
+                      )}
+
+                      {/* Bulk delete bar */}
+                      {closureSelected.size > 0 && (
+                        <div className="flex items-center justify-between gap-3 pt-1 border-t border-border">
+                          <p className="text-xs text-muted-foreground">{closureSelected.size} selected for deletion</p>
+                          <button onClick={() => deleteClosureSelected(allRestaurants)} disabled={deleting}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors">
+                            <ShieldAlert className="w-4 h-4" />
+                            {deleting ? "Deleting…" : `Delete ${closureSelected.size} restaurant${closureSelected.size !== 1 ? "s" : ""}`}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
             )}
           </div>
 
