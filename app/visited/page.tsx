@@ -4,13 +4,11 @@ import { useEffect, useState } from "react";
 import type { Restaurant, Visit } from "@/lib/types";
 import VisitCard from "@/components/VisitCard";
 import VisitModal from "@/components/VisitModal";
-import restaurantsData from "@/data/restaurants.json";
-
 export default function VisitedPage() {
   const [visits, setVisits] = useState<Record<string, Visit>>({});
   const [loading, setLoading] = useState(true);
   const [editTarget, setEditTarget] = useState<Restaurant | null>(null);
-  const [kvRestaurants, setKvRestaurants] = useState<Restaurant[]>([]);
+  const [allRestaurants, setAllRestaurants] = useState<Restaurant[]>([]);
 
   useEffect(() => {
     Promise.all([
@@ -20,17 +18,10 @@ export default function VisitedPage() {
       const map: Record<string, Visit> = {};
       visitsArr.forEach((v) => { map[v.restaurantId] = v; });
       setVisits(map);
-      // KV-only restaurants
-      const baseIds = new Set((restaurantsData as Restaurant[]).map((r) => r.id));
-      setKvRestaurants(restaurants.filter((r) => !baseIds.has(r.id)));
+      setAllRestaurants(Array.isArray(restaurants) ? restaurants : []);
       setLoading(false);
     });
   }, []);
-
-  const allRestaurants: Restaurant[] = [
-    ...(restaurantsData as Restaurant[]),
-    ...kvRestaurants,
-  ];
 
   const visitedRestaurants = allRestaurants.filter((r) => visits[r.id]?.visited);
 

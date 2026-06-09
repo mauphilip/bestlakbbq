@@ -37,6 +37,8 @@ export interface Restaurant {
   notes: string;
   /** True if this record was added/edited via admin (stored in KV) */
   kv_managed?: boolean;
+  /** Soft-delete flag — base JSON restaurants get a KV override with this set */
+  is_deleted?: boolean;
 }
 
 export interface Visit {

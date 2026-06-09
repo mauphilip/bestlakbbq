@@ -21,6 +21,7 @@ export interface DiscoverCandidate {
   last_yelp_sync?: string;
   kv_managed?: boolean;
   // Discover-specific
+  zip_code?: string; // stored so neighborhood can be re-derived when overrides change
   already_tracked: boolean;
   image_url?: string;
   is_closed: boolean;

@@ -22,14 +22,22 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [editTarget, setEditTarget] = useState<Restaurant | null>(null);
   const [addNew, setAddNew] = useState(false);
-  const [activeTab, setActiveTab] = useState<"search" | "manage" | "import">("manage");
+  const [activeTab, setActiveTab] = useState<"search" | "manage" | "import" | "neighborhoods">("manage");
   const [refreshing, setRefreshing] = useState(false);
   const [refreshResult, setRefreshResult] = useState<{ updated: number; notFound: number } | null>(null);
   const [searchFilter, setSearchFilter] = useState("");
+  const [zipOverrides, setZipOverrides] = useState<Record<string, string>>({});
+  const [newZip, setNewZip] = useState("");
+  const [newNeighborhood, setNewNeighborhood] = useState("");
+  const [savingZip, setSavingZip] = useState(false);
 
   useEffect(() => {
     const stored = getStoredToken();
-    if (stored) { setToken(stored); loadRestaurants(); }
+    if (stored) {
+      setToken(stored);
+      loadRestaurants();
+      fetch("/api/neighborhoods").then((r) => r.json()).then((d) => setZipOverrides(d.overrides ?? {})).catch(() => {});
+    }
   }, []);
 
   async function login() {
@@ -101,6 +109,27 @@ export default function AdminPage() {
     a.download = "restaurants.json";
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function saveZipOverride(zip: string, neighborhood: string) {
+    const updated = { ...zipOverrides, [zip]: neighborhood };
+    await fetch("/api/neighborhoods", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ overrides: updated }),
+    });
+    setZipOverrides(updated);
+  }
+
+  async function deleteZipOverride(zip: string) {
+    const updated = { ...zipOverrides };
+    delete updated[zip];
+    await fetch("/api/neighborhoods", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ overrides: updated }),
+    });
+    setZipOverrides(updated);
   }
 
   const unverifiedCount = restaurants.filter((r) => !r.price_verified).length;
@@ -195,6 +224,7 @@ export default function AdminPage() {
           { key: "manage", label: "Manage" },
           { key: "search", label: "Search & Add" },
           { key: "import", label: "Yelp Import" },
+          { key: "neighborhoods", label: "Neighborhoods" },
         ] as const).map(({ key, label }) => (
           <button key={key} onClick={() => setActiveTab(key)}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
@@ -310,6 +340,126 @@ export default function AdminPage() {
           }}
           onUpdated={() => loadRestaurants()}
         />
+      )}
+
+      {/* ── Neighborhoods tab ── */}
+      {activeTab === "neighborhoods" && (
+        <div className="space-y-6">
+          <p className="text-sm text-muted-foreground">
+            These overrides are merged on top of the built-in zip→neighborhood map used by Yelp Discover. Changes take effect on the next Yelp Discover refresh.
+          </p>
+
+          {/* Current overrides */}
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Current Overrides</h3>
+              <span className="text-xs text-muted-foreground">{Object.keys(zipOverrides).length} entries</span>
+            </div>
+            {Object.keys(zipOverrides).length === 0 ? (
+              <p className="px-4 py-4 text-sm text-muted-foreground">No overrides set.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-xs text-muted-foreground">
+                    <th className="text-left px-4 py-2">Zip</th>
+                    <th className="text-left px-4 py-2">Neighborhood</th>
+                    <th className="px-4 py-2" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {Object.entries(zipOverrides).sort(([a], [b]) => a.localeCompare(b)).map(([zip, hood]) => (
+                    <tr key={zip} className="hover:bg-foreground/[0.02]">
+                      <td className="px-4 py-2 font-mono text-xs">{zip}</td>
+                      <td className="px-4 py-2">{hood}</td>
+                      <td className="px-4 py-2 text-right">
+                        <button
+                          onClick={() => deleteZipOverride(zip)}
+                          className="text-xs px-2 py-1 border border-red-500/20 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-1 ml-auto">
+                          <Trash2 className="w-3 h-3" /> Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {/* Add row */}
+            <div className="border-t border-border px-4 py-3 flex items-center gap-2 flex-wrap">
+              <input
+                value={newZip}
+                onChange={(e) => setNewZip(e.target.value)}
+                placeholder="Zip code (e.g. 90010)"
+                maxLength={10}
+                className="bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm font-mono w-44 focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <input
+                value={newNeighborhood}
+                onChange={(e) => setNewNeighborhood(e.target.value)}
+                placeholder="Neighborhood label"
+                className="bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm flex-1 min-w-36 focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <button
+                disabled={savingZip || !newZip.trim() || !newNeighborhood.trim()}
+                onClick={async () => {
+                  setSavingZip(true);
+                  await saveZipOverride(newZip.trim(), newNeighborhood.trim());
+                  setNewZip("");
+                  setNewNeighborhood("");
+                  setSavingZip(false);
+                }}
+                className="flex items-center gap-1.5 text-sm px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0">
+                <Plus className="w-4 h-4" />{savingZip ? "Saving…" : "Add"}
+              </button>
+            </div>
+          </div>
+
+          {/* Built-in map reference */}
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-border">
+              <h3 className="text-sm font-semibold">Built-in Zip Map (read-only reference)</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Overrides above take priority over these entries.</p>
+            </div>
+            <div className="overflow-auto max-h-72">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-card">
+                  <tr className="border-b border-border text-muted-foreground">
+                    <th className="text-left px-4 py-2">Zip</th>
+                    <th className="text-left px-4 py-2">Neighborhood</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {[
+                    ["90004","Koreatown"],["90005","Koreatown"],["90006","Koreatown"],
+                    ["90010","Koreatown"],["90019","Koreatown"],["90020","Koreatown"],
+                    ["90036","Mid-Wilshire"],
+                    ["90247","Gardena"],["90248","Gardena"],["90249","Gardena"],
+                    ["90501","Torrance"],["90502","Torrance"],["90503","Torrance"],
+                    ["90504","Torrance"],["90505","Torrance"],["90506","Torrance"],
+                    ["91401","Van Nuys"],["91402","Van Nuys"],["91405","Van Nuys"],
+                    ["91406","Van Nuys"],["91411","Van Nuys"],["91423","Van Nuys"],
+                    ["91201","Glendale"],["91202","Glendale"],["91203","Glendale"],
+                    ["91204","Glendale"],["91205","Glendale"],["91206","Glendale"],
+                    ["91748","Rowland Heights"],["91789","Rowland Heights"],
+                    ["91801","Alhambra"],["91803","Alhambra"],
+                    ["91754","SGV"],["91755","SGV"],["91770","SGV"],
+                    ["92612","Irvine"],["92614","Irvine"],["92617","Irvine"],
+                    ["92618","Irvine"],["92620","Irvine"],["92604","Irvine"],
+                    ["90620","Buena Park"],["90621","Buena Park"],
+                    ["92801","Anaheim"],["92802","Anaheim"],["92804","Anaheim"],
+                    ["90701","Cerritos"],["90703","Cerritos"],
+                    ["92833","Fullerton"],["92835","Fullerton"],
+                    ["92868","Orange County"],["92865","Orange County"],
+                  ].map(([zip, hood]) => (
+                    <tr key={zip} className="hover:bg-foreground/[0.02]">
+                      <td className="px-4 py-1.5 font-mono text-muted-foreground">{zip}</td>
+                      <td className="px-4 py-1.5 text-muted-foreground/80">{hood}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Add new form (blank) */}

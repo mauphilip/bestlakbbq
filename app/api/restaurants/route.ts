@@ -29,7 +29,7 @@ export async function GET() {
   const baseIds = new Set((baseRestaurants as Restaurant[]).map((r) => r.id));
   const kvOnly = kvRestaurants.filter((r) => !baseIds.has(r.id));
 
-  const all = [...base, ...baseWithKvDefaults, ...kvOnly];
+  const all = [...base, ...baseWithKvDefaults, ...kvOnly].filter((r) => !r.is_deleted);
   return NextResponse.json(all);
 }
 
