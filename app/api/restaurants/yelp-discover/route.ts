@@ -66,10 +66,43 @@ function buildKnownSet(restaurants: Restaurant[]) {
   return { ids, slugs, names };
 }
 
-function cityToNeighborhood(city: string): string {
+// Zip codes let us distinguish Koreatown / Mid-Wilshire / etc. inside "Los Angeles"
+// and map OC cities to the right neighborhood label for filters.
+const ZIP_TO_NEIGHBORHOOD: Record<string, string> = {
+  // Koreatown (90004–90006, 90010, 90019–90020)
+  "90004": "Koreatown", "90005": "Koreatown", "90006": "Koreatown",
+  "90010": "Koreatown", "90019": "Koreatown", "90020": "Koreatown",
+  // Mid-Wilshire
+  "90036": "Mid-Wilshire",
+  // Gardena
+  "90247": "Gardena", "90248": "Gardena", "90249": "Gardena",
+  // Torrance
+  "90501": "Torrance", "90502": "Torrance", "90503": "Torrance",
+  "90504": "Torrance", "90505": "Torrance", "90506": "Torrance",
+  // Van Nuys / San Fernando Valley
+  "91401": "Van Nuys", "91402": "Van Nuys", "91405": "Van Nuys",
+  "91406": "Van Nuys", "91411": "Van Nuys", "91423": "Van Nuys",
+  // Glendale
+  "91201": "Glendale", "91202": "Glendale", "91203": "Glendale",
+  "91204": "Glendale", "91205": "Glendale", "91206": "Glendale",
+  // Rowland Heights / SGV
+  "91748": "Rowland Heights", "91789": "Rowland Heights",
+  "91801": "Alhambra", "91803": "Alhambra",
+  "91754": "SGV", "91755": "SGV", "91770": "SGV",
+  // Orange County
+  "92612": "Irvine", "92614": "Irvine", "92617": "Irvine",
+  "92618": "Irvine", "92620": "Irvine", "92604": "Irvine",
+  "90620": "Buena Park", "90621": "Buena Park",
+  "92801": "Anaheim", "92802": "Anaheim", "92804": "Anaheim",
+  "90701": "Cerritos", "90703": "Cerritos",
+  "92833": "Fullerton", "92835": "Fullerton",
+  "92868": "Orange County", "92865": "Orange County",
+};
+
+function cityToNeighborhood(city: string, zip?: string, zipMap: Record<string, string> = ZIP_TO_NEIGHBORHOOD): string {
+  // Zip takes priority — it disambiguates "Los Angeles" into Koreatown, etc.
+  if (zip && zipMap[zip]) return zipMap[zip];
   const map: Record<string, string> = {
-    "Los Angeles": "Los Angeles",
-    Koreatown: "Koreatown",
     Gardena: "Gardena",
     Torrance: "Torrance",
     Irvine: "Irvine",
@@ -82,6 +115,8 @@ function cityToNeighborhood(city: string): string {
     "Rowland Heights": "Rowland Heights",
     Glendale: "Glendale",
     "Van Nuys": "Van Nuys",
+    Koreatown: "Koreatown",
+    "Los Angeles": "Los Angeles", // fallback when zip doesn't match
   };
   return map[city] ?? city;
 }
@@ -97,12 +132,12 @@ const LOCATIONS = [
   "Buena Park, CA",
 ];
 
-async function runDiscovery(known: ReturnType<typeof buildKnownSet>) {
+async function runDiscovery(known: ReturnType<typeof buildKnownSet>, zipMap: Record<string, string> = ZIP_TO_NEIGHBORHOOD, locations: string[] = LOCATIONS) {
   const seen = new Set<string>();
   const candidates: DiscoverCandidate[] = [];
   const errors: string[] = [];
 
-  for (const location of LOCATIONS) {
+  for (const location of locations) {
     // Paginate up to 200 results per location (Yelp max with offset)
     for (let offset = 0; offset < 200; offset += 50) {
       const page = await yelpSearch({ categories: "koreanbbq", location, offset: String(offset) });
@@ -116,7 +151,7 @@ async function runDiscovery(known: ReturnType<typeof buildKnownSet>) {
       for (const biz of page.businesses) {
         if (seen.has(biz.id)) continue;
         seen.add(biz.id);
-        candidates.push(bizToCandidate(biz, known));
+        candidates.push(bizToCandidate(biz, known, zipMap));
       }
 
       // Stop paginating if we've seen all results
@@ -128,7 +163,7 @@ async function runDiscovery(known: ReturnType<typeof buildKnownSet>) {
   return { candidates, totalScanned: seen.size, errors };
 }
 
-function bizToCandidate(biz: YelpBiz, known: ReturnType<typeof buildKnownSet>): DiscoverCandidate {
+function bizToCandidate(biz: YelpBiz, known: ReturnType<typeof buildKnownSet>, zipMap: Record<string, string> = ZIP_TO_NEIGHBORHOOD): DiscoverCandidate {
   const slug = biz.url?.match(/yelp\.com\/biz\/([^?#/]+)/)?.[1] ?? "";
   const alreadyTracked =
     (biz.id ? known.ids.has(biz.id) : false) ||
@@ -139,7 +174,8 @@ function bizToCandidate(biz: YelpBiz, known: ReturnType<typeof buildKnownSet>): 
     id: slug || biz.id || "",
     yelp_id: biz.id ?? "",
     name: biz.name ?? "",
-    neighborhood: cityToNeighborhood(biz.location?.city ?? ""),
+    neighborhood: cityToNeighborhood(biz.location?.city ?? "", biz.location?.zip_code, zipMap),
+    zip_code: biz.location?.zip_code,
     ayce: false,
     ayce_tiers: [],
     non_ayce_est_per_person: null,
@@ -188,6 +224,10 @@ export async function GET(req: NextRequest) {
   }
 
   const forceRefresh = req.nextUrl.searchParams.get("refresh") === "1";
+  const locationParam = req.nextUrl.searchParams.get("locations");
+  const selectedLocations = forceRefresh && locationParam
+    ? LOCATIONS.filter((l) => locationParam.split(",").some((p) => l.toLowerCase().startsWith(p.toLowerCase().trim())))
+    : LOCATIONS;
 
   try {
     // Build the known-restaurant set (non-fatal — if KV is down, use base JSON only)
@@ -197,6 +237,13 @@ export async function GET(req: NextRequest) {
       kv = (await getKVRestaurants()) as unknown as Restaurant[];
     } catch { /* KV unavailable */ }
     const known = buildKnownSet([...base, ...kv]);
+
+    // Load KV neighborhood overrides (non-fatal)
+    let zipMap: Record<string, string> = { ...ZIP_TO_NEIGHBORHOOD };
+    try {
+      const overrides = await redis.get<Record<string, string>>("kbbq_neighborhood_overrides");
+      if (overrides) zipMap = { ...ZIP_TO_NEIGHBORHOOD, ...overrides };
+    } catch { /* non-fatal */ }
 
     // Load KV cache (non-fatal)
     let cache: DiscoverCache | null = null;
@@ -212,6 +259,10 @@ export async function GET(req: NextRequest) {
           (c.yelp_id ? known.ids.has(c.yelp_id) : false) ||
           (c.id ? known.slugs.has(c.id) : false) ||
           known.names.has((c.name ?? "").toLowerCase().trim()),
+        // Re-apply neighborhood with current zipMap so overrides take effect on cache hits
+        neighborhood: c.zip_code && zipMap[c.zip_code]
+          ? zipMap[c.zip_code]
+          : c.neighborhood,
       }));
       return NextResponse.json({
         candidates: updated,
@@ -235,7 +286,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Full Yelp scan
-    const { candidates: fresh, totalScanned, errors } = await runDiscovery(known);
+    const { candidates: fresh, totalScanned, errors } = await runDiscovery(known, zipMap, selectedLocations);
     const merged = mergeWithCache(cache?.candidates ?? [], fresh);
 
     const newCache: DiscoverCache = {

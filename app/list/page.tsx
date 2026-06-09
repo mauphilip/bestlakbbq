@@ -1,9 +1,9 @@
 import RestaurantList from "@/components/RestaurantList";
-import restaurantsData from "@/data/restaurants.json";
+import { getAllRestaurants } from "@/lib/getRestaurants";
 import type { Restaurant } from "@/lib/types";
 
-export default function ListPage() {
-  const restaurants = restaurantsData as Restaurant[];
+export default async function ListPage() {
+  const restaurants: Restaurant[] = await getAllRestaurants();
   return (
     <div className="min-h-screen pt-24 pb-16 px-6 max-w-6xl mx-auto">
       <div className="mb-10">

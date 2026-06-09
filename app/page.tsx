@@ -1,10 +1,10 @@
 import KBBQChartWrapper from "@/components/KBBQChartWrapper";
 import AboutCard from "@/components/AboutCard";
-import restaurantsData from "@/data/restaurants.json";
+import { getAllRestaurants } from "@/lib/getRestaurants";
 import type { Restaurant } from "@/lib/types";
 
-export default function Home() {
-  const restaurants = restaurantsData as Restaurant[];
+export default async function Home() {
+  const restaurants: Restaurant[] = await getAllRestaurants();
   const ayceCount = restaurants.filter(r => r.ayce).length;
   const nonAyceCount = restaurants.length - ayceCount;
   const minPrice = Math.min(...restaurants.map(r =>

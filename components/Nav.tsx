@@ -10,6 +10,7 @@ const links = [
   { href: "/", label: "Chart" },
   { href: "/list", label: "Directory" },
   { href: "/calculator", label: "Beat the Restaurant" },
+  { href: "/faq", label: "FAQ" },
 ];
 
 const secretLinks = [
