@@ -3,24 +3,53 @@ import { verifyAdminToken } from "@/lib/auth";
 import { getKVRestaurants, redis } from "@/lib/kv";
 import baseRestaurants from "@/data/restaurants.json";
 import type { Restaurant, PriceTier } from "@/lib/types";
+import type { DiscoverCandidate, DiscoverCache } from "@/lib/yelp-types";
 
 const YELP_API = "https://api.yelp.com/v3";
 const CACHE_KEY = "kbbq_discover_cache";
 
-export interface DiscoverCandidate extends Partial<Restaurant> {
-  yelp_id: string;
-  already_tracked: boolean;
-  image_url?: string;
-  is_closed: boolean;
-  kbbq_confidence: "high" | "medium" | "low";
-  categories_raw: string[]; // Yelp category aliases for display
-}
+// Yelp category aliases that are NOT Korean BBQ — used to hard-filter results
+// from the broader barbeque,korean compound search
+const NON_KBBQ_BLOCKLIST = new Set([
+  "coffee",
+  "cafes",
+  "coffeeroasteries",
+  "bubbletea",
+  "bakeries",
+  "desserts",
+  "icecream",
+  "hotdog",
+  "pizza",
+  "japanese",
+  "sushi",
+  "ramen",
+  "chinese",
+  "dimsum",
+  "vietnamese",
+  "thai",
+  "mexican",
+  "indpak",
+  "hotpot",
+  "soup",
+  "sandwiches",
+  "burgers",
+  "chickenshop",
+  "seafood",
+  "bars",
+  "nightlife",
+  "karaoke",
+  "convenience",
+  "grocery",
+  "markets",
+  "convenience",
+]);
 
-export interface DiscoverCache {
-  candidates: DiscoverCandidate[];
-  lastFetched: string;
-  totalScanned: number;
-}
+// Businesses whose name contains these strings are almost certainly not KBBQ
+const NAME_BLOCKLIST = [
+  /coffee/i, /cafe/i, /boba/i, /tea house/i, /tofu/i, /순두부/i,
+  /bakery/i, /pastry/i, /ramen/i, /pho/i, /sushi/i, /pizza/i,
+  /karaoke/i, /grocery/i, /market/i, /mart\b/i,
+];
 
 interface YelpBiz {
   id: string;
@@ -48,22 +77,31 @@ async function searchYelp(
   return json;
 }
 
-// Score how likely a Yelp biz is actually a Korean BBQ restaurant
+// Confidence that this biz is actually a Korean BBQ restaurant
 function getKbbqConfidence(biz: YelpBiz): "high" | "medium" | "low" {
   const aliases = biz.categories.map((c) => c.alias);
 
-  // Direct KBBQ category → definitive
+  // Has the dedicated Korean BBQ Yelp category → definitive
   if (aliases.includes("koreanbbq")) return "high";
 
-  // Name contains strong KBBQ signals
-  const strongKeywords = /\b(kbbq|galbi|gal-bi|bulgogi|bbq|grill|gopchang|samgyeopsal|yakiniku|숯불|고기|갈비|구이|barbecue)\b/i;
-  if (strongKeywords.test(biz.name)) return "medium";
+  // Name has strong KBBQ signals
+  const bbqNamePattern = /\b(kbbq|galbi|gal-bi|bulgogi|gopchang|samgyeopsal|yakiniku|숯불|고기|갈비|구이|bbq|grill|barbeque|barbecue)\b/i;
+  if (bbqNamePattern.test(biz.name)) return "medium";
 
-  // Korean category but no KBBQ signals — likely non-BBQ Korean food
   return "low";
 }
 
-function buildKnownSet(restaurants: Restaurant[]): { ids: Set<string>; slugs: Set<string>; names: Set<string> } {
+// Hard filter: reject if biz clearly isn't KBBQ
+function isDefinitelyNotKbbq(biz: YelpBiz): boolean {
+  // Blocked by name
+  if (NAME_BLOCKLIST.some((re) => re.test(biz.name))) return true;
+  // Blocked if ALL categories are non-BBQ
+  const aliases = biz.categories.map((c) => c.alias);
+  if (aliases.every((a) => NON_KBBQ_BLOCKLIST.has(a))) return true;
+  return false;
+}
+
+function buildKnownSet(restaurants: Restaurant[]) {
   const ids = new Set<string>();
   const slugs = new Set<string>();
   const names = new Set<string>();
@@ -98,9 +136,6 @@ function cityToNeighborhood(city: string): string {
   return map[city] ?? city;
 }
 
-// Two search passes per location:
-// Pass 1: categories=koreanbbq (high-precision, may miss uncategorised spots)
-// Pass 2: term="korean bbq", categories=korean (broader net — catches spots tagged only as "Korean")
 const SEARCH_LOCATIONS = [
   "Koreatown, Los Angeles, CA",
   "Los Angeles, CA",
@@ -112,51 +147,46 @@ const SEARCH_LOCATIONS = [
   "Buena Park, CA",
 ];
 
+// Two Yelp search strategies per location:
+// Strategy A: categories=koreanbbq — Yelp's dedicated KBBQ category (highest precision)
+// Strategy B: categories=barbeque,korean — compound category filter (catches spots tagged
+//             as both barbeque AND korean but missing the koreanbbq alias)
+// Both strategies then apply the hard blocklist + confidence scoring
 async function runDiscovery(known: ReturnType<typeof buildKnownSet>) {
   const seen = new Set<string>();
   const candidates: DiscoverCandidate[] = [];
   const errors: string[] = [];
 
+  const strategies = [
+    { categories: "koreanbbq" },
+    { categories: "barbeque,korean" },
+  ];
+
   for (const loc of SEARCH_LOCATIONS) {
-    // Pass 1 — category=koreanbbq
-    for (let offset = 0; offset < 200; offset += 50) {
-      const page = await searchYelp({ categories: "koreanbbq", location: loc, offset: String(offset) });
-      if (page.error) { errors.push(`[koreanbbq] ${loc}: ${page.error}`); break; }
-      if (!page.businesses?.length) break;
+    for (const strategy of strategies) {
+      for (let offset = 0; offset < 200; offset += 50) {
+        const page = await searchYelp({ ...strategy, location: loc, offset: String(offset) });
+        if (page.error) { errors.push(`[${strategy.categories}] ${loc}: ${page.error}`); break; }
+        if (!page.businesses?.length) break;
 
-      for (const biz of page.businesses) {
-        if (seen.has(biz.id)) continue;
-        seen.add(biz.id);
-        candidates.push(bizToCandidate(biz, known));
-      }
+        for (const biz of page.businesses) {
+          if (seen.has(biz.id)) continue;
+          seen.add(biz.id);
 
-      if (offset + 50 >= Math.min(page.total ?? 0, 200)) break;
-      await delay(200);
-    }
+          // Hard filter: skip obvious non-KBBQ
+          if (isDefinitelyNotKbbq(biz)) continue;
 
-    // Pass 2 — term="korean bbq grill", categories=korean (catch mis-categorised spots)
-    for (let offset = 0; offset < 100; offset += 50) {
-      const page = await searchYelp({
-        term: "korean bbq grill galbi",
-        categories: "korean",
-        location: loc,
-        offset: String(offset),
-      });
-      if (page.error) { errors.push(`[korean+term] ${loc}: ${page.error}`); break; }
-      if (!page.businesses?.length) break;
+          const candidate = bizToCandidate(biz, known);
 
-      for (const biz of page.businesses) {
-        if (seen.has(biz.id)) continue;
-        seen.add(biz.id);
-        const candidate = bizToCandidate(biz, known);
-        // Only keep medium/high confidence from this broader pass
-        if (candidate.kbbq_confidence !== "low") {
+          // From the broader barbeque+korean strategy, require at least medium confidence
+          if (strategy.categories !== "koreanbbq" && candidate.kbbq_confidence === "low") continue;
+
           candidates.push(candidate);
         }
-      }
 
-      if (offset + 50 >= Math.min(page.total ?? 0, 100)) break;
-      await delay(200);
+        if (offset + 50 >= Math.min(page.total ?? 0, 200)) break;
+        await delay(200);
+      }
     }
   }
 
@@ -201,9 +231,24 @@ function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// ── GET /api/restaurants/yelp-discover
-// ?refresh=1  → force re-fetch from Yelp and update cache
-// (default)   → return cached results from KV if available
+function mergeWithCache(existing: DiscoverCandidate[], fresh: DiscoverCandidate[]): DiscoverCandidate[] {
+  const byId = new Map<string, DiscoverCandidate>();
+  for (const c of existing) byId.set(c.yelp_id, c);
+  for (const c of fresh) {
+    const prev = byId.get(c.yelp_id);
+    byId.set(c.yelp_id, prev ? { ...prev, ...c } : c);
+  }
+  return Array.from(byId.values()).sort((a, b) => {
+    const conf = { high: 2, medium: 1, low: 0 } as const;
+    const cd = conf[b.kbbq_confidence] - conf[a.kbbq_confidence];
+    if (cd !== 0) return cd;
+    return (b.review_count ?? 0) - (a.review_count ?? 0);
+  });
+}
+
+// GET /api/restaurants/yelp-discover
+// ?refresh=1 → force re-scan Yelp and update cache
+// default    → return KV cache; if empty, return empty (don't auto-scan)
 export async function GET(req: NextRequest) {
   if (!verifyAdminToken(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -215,7 +260,6 @@ export async function GET(req: NextRequest) {
 
   const forceRefresh = req.nextUrl.searchParams.get("refresh") === "1";
 
-  // Load current tracked restaurants to mark already_tracked
   let base: Restaurant[] = [];
   let kv: Restaurant[] = [];
   try {
@@ -227,16 +271,14 @@ export async function GET(req: NextRequest) {
   const all = [...base, ...kv];
   const known = buildKnownSet(all);
 
-  // Load existing cache
+  // Try to load existing cache
   let cache: DiscoverCache | null = null;
   try {
     cache = await redis.get<DiscoverCache>(CACHE_KEY);
-  } catch {
-    // KV unavailable — fall through to fresh fetch
-  }
+  } catch { /* KV unavailable */ }
 
+  // Return cache without hitting Yelp (default page-load behaviour)
   if (cache && !forceRefresh) {
-    // Re-evaluate already_tracked against current DB (restaurants may have been added since cache was built)
     const updated = cache.candidates.map((c) => ({
       ...c,
       already_tracked:
@@ -252,10 +294,13 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Fresh fetch from Yelp
-  const { candidates: fresh, totalScanned, errors } = await runDiscovery(known);
+  // No cache and no refresh requested → return empty so the UI shows the "Fetch" button
+  if (!forceRefresh) {
+    return NextResponse.json({ candidates: [], totalScanned: 0, fromCache: false });
+  }
 
-  // Merge with existing cache (preserve candidates not in fresh results, add new ones)
+  // Full Yelp scan
+  const { candidates: fresh, totalScanned, errors } = await runDiscovery(known);
   const merged = mergeWithCache(cache?.candidates ?? [], fresh);
 
   const newCache: DiscoverCache = {
@@ -265,37 +310,15 @@ export async function GET(req: NextRequest) {
   };
 
   try {
-    // Cache for 7 days
-    await redis.set(CACHE_KEY, newCache, { ex: 60 * 60 * 24 * 7 });
-  } catch {
-    // Non-fatal — still return results
-  }
+    await redis.set(CACHE_KEY, newCache, { ex: 60 * 60 * 24 * 7 }); // 7 days
+  } catch { /* non-fatal */ }
 
-  const newCount = merged.filter((c) => !c.already_tracked && !c.is_closed && c.kbbq_confidence !== "low").length;
   return NextResponse.json({
     candidates: merged,
     totalScanned,
-    newCount,
+    newCount: merged.filter((c) => !c.already_tracked && !c.is_closed && c.kbbq_confidence !== "low").length,
     errors,
     fromCache: false,
     lastFetched: newCache.lastFetched,
-  });
-}
-
-// Merge fresh Yelp results into existing cache
-// Deduplicates by yelp_id; fresh data wins for fields that Yelp owns
-function mergeWithCache(existing: DiscoverCandidate[], fresh: DiscoverCandidate[]): DiscoverCandidate[] {
-  const byId = new Map<string, DiscoverCandidate>();
-  for (const c of existing) byId.set(c.yelp_id, c);
-  for (const c of fresh) {
-    const prev = byId.get(c.yelp_id);
-    byId.set(c.yelp_id, prev ? { ...prev, ...c } : c);
-  }
-  // Sort: high confidence first, then by review count
-  return Array.from(byId.values()).sort((a, b) => {
-    const conf = { high: 2, medium: 1, low: 0 } as const;
-    const cd = conf[b.kbbq_confidence] - conf[a.kbbq_confidence];
-    if (cd !== 0) return cd;
-    return (b.review_count ?? 0) - (a.review_count ?? 0);
   });
 }

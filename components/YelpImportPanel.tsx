@@ -6,8 +6,7 @@ import {
   ChevronDown, ChevronUp, Clock, ShieldAlert, ArrowRight,
 } from "lucide-react";
 import type { Restaurant } from "@/lib/types";
-import type { DiscoverCandidate } from "@/app/api/restaurants/yelp-discover/route";
-import type { RestaurantDiff } from "@/app/api/restaurants/yelp-check/route";
+import type { DiscoverCandidate, RestaurantDiff } from "@/lib/yelp-types";
 
 interface Props {
   token: string;

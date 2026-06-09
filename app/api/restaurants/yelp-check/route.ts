@@ -3,42 +3,12 @@ import { verifyAdminToken } from "@/lib/auth";
 import { getKVRestaurants } from "@/lib/kv";
 import baseRestaurants from "@/data/restaurants.json";
 import type { Restaurant } from "@/lib/types";
+import type { RestaurantDiff } from "@/lib/yelp-types";
 
 const YELP_API = "https://api.yelp.com/v3";
 
 function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
-}
-
-export interface YelpSnapshot {
-  rating: number;
-  review_count: number;
-  price_tier: string | null;
-  yelp_url: string;
-  is_closed: boolean;
-}
-
-export interface RestaurantDiff {
-  id: string;
-  name: string;
-  neighborhood: string;
-  yelp_id: string | null;
-  yelp_url: string;
-  current: {
-    rating: number;
-    review_count: number;
-    price_tier: string | null;
-    yelp_url: string;
-  };
-  yelp: YelpSnapshot | null; // null = could not fetch
-  changes: {
-    field: string;
-    label: string;
-    old: string | number | boolean | null;
-    new: string | number | boolean | null;
-  }[];
-  now_closed: boolean;
-  error?: string;
 }
 
 async function fetchYelpBiz(id: string): Promise<Record<string, unknown> | null> {
@@ -55,37 +25,10 @@ function getYelpId(r: Restaurant): string | null {
   return match?.[1] ?? null;
 }
 
-// POST /api/restaurants/yelp-check
-// Body: { ids?: string[] } — check specific restaurants, or all if omitted
-export async function POST(req: NextRequest) {
-  if (!verifyAdminToken(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!process.env.YELP_API_KEY) {
-    return NextResponse.json({ error: "YELP_API_KEY not configured" }, { status: 500 });
-  }
-
-  const body = await req.json().catch(() => ({}));
-  const filterIds: string[] = body.ids ?? [];
-
-  let base: Restaurant[] = [];
-  let kv: Restaurant[] = [];
-  try {
-    base = baseRestaurants as Restaurant[];
-    kv = (await getKVRestaurants()) as unknown as Restaurant[];
-  } catch (e) {
-    return NextResponse.json({ error: `DB error: ${e}` }, { status: 500 });
-  }
-
-  let all = [...base, ...kv];
-  if (filterIds.length) {
-    all = all.filter((r) => filterIds.includes(r.id));
-  }
-
+async function checkAll(restaurants: Restaurant[]): Promise<RestaurantDiff[]> {
   const results: RestaurantDiff[] = [];
 
-  for (const r of all) {
+  for (const r of restaurants) {
     const yid = getYelpId(r);
 
     const current = {
@@ -100,7 +43,7 @@ export async function POST(req: NextRequest) {
         id: r.id, name: r.name, neighborhood: r.neighborhood,
         yelp_id: null, yelp_url: r.yelp_url ?? "",
         current, yelp: null, changes: [], now_closed: false,
-        error: "No Yelp ID — run Sync from Yelp first",
+        error: "No Yelp ID — run Sync from Yelp first to populate",
       });
       continue;
     }
@@ -114,18 +57,18 @@ export async function POST(req: NextRequest) {
           id: r.id, name: r.name, neighborhood: r.neighborhood,
           yelp_id: yid, yelp_url: r.yelp_url ?? "",
           current, yelp: null, changes: [], now_closed: false,
-          error: "Yelp returned no data (may have been removed)",
+          error: "Yelp returned no data (listing may have been removed)",
         });
         continue;
       }
 
       const isClosed = !!(biz.is_closed);
-      const yelpRating = biz.rating as number ?? null;
-      const yelpReviews = biz.review_count as number ?? null;
-      const yelpPrice = biz.price as string ?? null;
+      const yelpRating = (biz.rating as number) ?? null;
+      const yelpReviews = (biz.review_count as number) ?? null;
+      const yelpPrice = (biz.price as string) ?? null;
       const yelpUrl = (biz.url as string)?.split("?")[0] ?? null;
 
-      const yelp: YelpSnapshot = {
+      const yelpSnap = {
         rating: yelpRating,
         review_count: yelpReviews,
         price_tier: yelpPrice,
@@ -154,7 +97,7 @@ export async function POST(req: NextRequest) {
       results.push({
         id: r.id, name: r.name, neighborhood: r.neighborhood,
         yelp_id: yid, yelp_url: r.yelp_url ?? "",
-        current, yelp, changes, now_closed: isClosed,
+        current, yelp: yelpSnap, changes, now_closed: isClosed,
       });
     } catch (e) {
       results.push({
@@ -165,12 +108,43 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Sort: closed first, then changed, then up-to-date
+  // Sort: closed first → changed → up-to-date → errors
   results.sort((a, b) => {
     if (a.now_closed !== b.now_closed) return a.now_closed ? -1 : 1;
     if ((a.changes.length > 0) !== (b.changes.length > 0)) return a.changes.length > 0 ? -1 : 1;
+    if (!!a.error !== !!b.error) return a.error ? 1 : -1;
     return a.name.localeCompare(b.name);
   });
+
+  return results;
+}
+
+// POST /api/restaurants/yelp-check
+// Body: { ids?: string[] } — omit ids to check all restaurants
+export async function POST(req: NextRequest) {
+  if (!verifyAdminToken(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!process.env.YELP_API_KEY) {
+    return NextResponse.json({ error: "YELP_API_KEY not configured" }, { status: 500 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const filterIds: string[] = body.ids ?? [];
+
+  let base: Restaurant[] = [];
+  let kv: Restaurant[] = [];
+  try {
+    base = baseRestaurants as Restaurant[];
+    kv = (await getKVRestaurants()) as unknown as Restaurant[];
+  } catch (e) {
+    return NextResponse.json({ error: `DB error: ${e}` }, { status: 500 });
+  }
+
+  let all = [...base, ...kv];
+  if (filterIds.length) all = all.filter((r) => filterIds.includes(r.id));
+
+  const results = await checkAll(all);
 
   return NextResponse.json({
     results,
@@ -182,16 +156,15 @@ export async function POST(req: NextRequest) {
   });
 }
 
-// Keep GET for backward compat — delegates to POST logic
+// GET kept for backward compat
 export async function GET(req: NextRequest) {
   if (!verifyAdminToken(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  // Wrap as POST-style call with no filter
-  const fakeReq = new NextRequest(req.url, {
+  const fakePost = new NextRequest(req.url, {
     method: "POST",
     headers: req.headers,
     body: JSON.stringify({}),
   });
-  return POST(fakeReq);
+  return POST(fakePost);
 }
