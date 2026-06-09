@@ -242,7 +242,7 @@ export default function AdminPage() {
           {/* Yelp sync tools */}
           <section className="space-y-3">
             <h2 className="text-sm font-semibold text-muted-foreground">Yelp sync &amp; review</h2>
-            <ManageSyncTools token={token} allRestaurants={restaurants} onUpdated={loadRestaurants} />
+            <ManageSyncTools token={token} onUpdated={loadRestaurants} />
           </section>
 
           {/* Toolbar */}

@@ -10,7 +10,6 @@ import type { RestaurantDiff } from "@/lib/yelp-types";
 
 interface Props {
   token: string;
-  allRestaurants: Restaurant[];
   onUpdated?: () => void;
 }
 
@@ -48,7 +47,14 @@ function DiffValue({
   );
 }
 
-export default function ManageSyncTools({ token, allRestaurants, onUpdated }: Props) {
+export default function ManageSyncTools({ token, onUpdated }: Props) {
+  // ── Re-link from Yelp ──────────────────────────────────────────────────────────
+  const [relinking, setRelinking] = useState(false);
+  const [relinkError, setRelinkError] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [relinkResult, setRelinkResult] = useState<any | null>(null);
+  const [relinkDryRun, setRelinkDryRun] = useState(true);
+
   // ── Closure check ────────────────────────────────────────────────────────────
   const [closureRunning, setClosureRunning] = useState(false);
   const [closureResults, setClosureResults] = useState<RestaurantDiff[] | null>(null);
@@ -108,6 +114,25 @@ export default function ManageSyncTools({ token, allRestaurants, onUpdated }: Pr
   const diffsWithChanges = diffs?.filter((d) => d.changes.length > 0) ?? [];
 
   // ── Closure check action ──────────────────────────────────────────────────────
+  async function runRelink(dryRun: boolean) {
+    setRelinking(true);
+    setRelinkError("");
+    setRelinkDryRun(dryRun);
+    if (dryRun) setRelinkResult(null);
+    try {
+      const res = await fetch("/api/restaurants/relink", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ dryRun }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setRelinkResult(data);
+      if (!dryRun) onUpdated?.();
+    } catch (e) { setRelinkError(String(e)); }
+    setRelinking(false);
+  }
+
   async function runClosureCheck() {
     setClosureRunning(true);
     setClosureError("");
@@ -130,20 +155,18 @@ export default function ManageSyncTools({ token, allRestaurants, onUpdated }: Pr
       setClosureResults(results);
       setClosureLastChecked(timestamp);
       try { sessionStorage.setItem("kbbq_closure_cache", JSON.stringify({ results, timestamp })); } catch { /* ignore */ }
-      const allRes = await fetch("/api/restaurants").then((r) => r.json()).catch(() => []);
-      const kvIds = new Set<string>((allRes as Restaurant[]).filter((r) => r.kv_managed).map((r) => r.id));
-      setClosureSelected(new Set(results.filter((r) => kvIds.has(r.id)).map((r) => r.id)));
+      // Pre-select all genuinely-closed restaurants (all are now deletable via soft-delete).
+      setClosureSelected(new Set(results.filter((r) => r.now_closed).map((r) => r.id)));
     } catch (e) { setClosureError(String(e)); }
     setClosureRunning(false);
   }
 
-  async function deleteClosureSelected(restaurants: Restaurant[]) {
+  async function deleteClosureSelected() {
     const toDelete = [...closureSelected].filter((id) => !deletedIds.has(id));
     if (!toDelete.length) return;
     setDeleting(true);
     for (const id of toDelete) {
-      const r = restaurants.find((x) => x.id === id);
-      if (!r?.kv_managed) continue;
+      // DELETE soft-deletes base-JSON restaurants (KV tombstone) and hard-deletes KV-only ones.
       try {
         await fetch(`/api/restaurants/${id}`, {
           method: "DELETE",
@@ -272,6 +295,72 @@ export default function ManageSyncTools({ token, allRestaurants, onUpdated }: Pr
   return (
     <div className="space-y-6">
 
+      {/* ── Section 0: Re-link from Yelp ─────────────────────────────── */}
+      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h3 className="text-sm font-semibold">Re-link from Yelp</h3>
+            <p className="text-xs text-muted-foreground mt-0.5 max-w-xl">
+              Searches Yelp by name for every restaurant and fixes stale/guessed Yelp links (the cause of broken
+              restaurant links and reviews not updating). Run a preview first, then apply.
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <button onClick={() => runRelink(true)} disabled={relinking}
+              className="flex items-center gap-2 px-3 py-1.5 border border-border text-sm font-medium rounded-lg hover:bg-foreground/5 disabled:opacity-50 transition-colors">
+              <RefreshCw className={`w-4 h-4 ${relinking && relinkDryRun ? "animate-spin" : ""}`} />
+              {relinking && relinkDryRun ? "Scanning…" : "Preview"}
+            </button>
+            {relinkResult?.dryRun && relinkResult?.summary?.confident > 0 && (
+              <button onClick={() => runRelink(false)} disabled={relinking}
+                className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                <CheckCircle className="w-4 h-4" />
+                {relinking && !relinkDryRun ? "Applying…" : `Apply ${relinkResult.summary.confident}`}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {relinkError && <ErrorBox msg={relinkError} />}
+        {relinking && <LoadingSpinner label="Searching Yelp for each restaurant… ~15–30s" />}
+
+        {relinkResult && !relinking && (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className="px-2.5 py-1 rounded-lg border border-green-500/20 bg-green-500/10 text-green-600 dark:text-green-400 font-medium">
+                {relinkResult.summary.confident} confident {relinkResult.dryRun ? "to fix" : "fixed"}
+              </span>
+              {relinkResult.summary.weak > 0 && (
+                <span className="px-2.5 py-1 rounded-lg border border-yellow-500/20 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
+                  {relinkResult.summary.weak} low-confidence (skipped)
+                </span>
+              )}
+              {relinkResult.summary.same > 0 && (
+                <span className="px-2.5 py-1 rounded-lg border border-border bg-secondary text-muted-foreground">
+                  {relinkResult.summary.same} already correct
+                </span>
+              )}
+              {relinkResult.summary.noMatch > 0 && (
+                <span className="px-2.5 py-1 rounded-lg border border-border bg-secondary text-muted-foreground">
+                  {relinkResult.summary.noMatch} no match
+                </span>
+              )}
+            </div>
+            {relinkResult.dryRun && (
+              <p className="text-xs text-muted-foreground">
+                Preview only — nothing changed. Click <span className="font-medium">Apply</span> to write the confident fixes.
+              </p>
+            )}
+            {!relinkResult.dryRun && (
+              <div className="flex items-center gap-2 text-sm text-green-500 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
+                <CheckCircle className="w-4 h-4 shrink-0" />
+                Re-linked {relinkResult.summary.applied} restaurants. Re-run the closure/sync checks to see corrected data.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* ── Section 1: Closure check ─────────────────────────────────── */}
       <div className="rounded-xl border border-border p-4 space-y-3">
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -297,77 +386,75 @@ export default function ManageSyncTools({ token, allRestaurants, onUpdated }: Pr
         {closureError && <ErrorBox msg={closureError} />}
         {closureRunning && <LoadingSpinner label="Checking each restaurant on Yelp… takes 1–2 min" />}
 
-        {closureResults && !closureRunning && (
-          closureResults.length === 0 ? (
-            <div className="flex items-center gap-2 text-sm text-green-500">
-              <CheckCircle className="w-4 h-4" /> All {`restaurants are still open on Yelp.`}
-            </div>
-          ) : (() => {
-              const kvIds = new Set(allRestaurants.filter((r) => r.kv_managed).map((r) => r.id));
-              const visible = closureResults.filter((d) => !deletedIds.has(d.id));
-              const selectableIds = visible.filter((d) => kvIds.has(d.id)).map((d) => d.id);
-              const baseJsonClosed = visible.filter((d) => !kvIds.has(d.id));
-              const allSelected = selectableIds.length > 0 && selectableIds.every((id) => closureSelected.has(id));
+        {closureResults && !closureRunning && (() => {
+            const live = closureResults.filter((d) => !deletedIds.has(d.id));
+            const closed = live.filter((d) => d.now_closed);
+            const unreachable = live.filter((d) => !d.now_closed); // 404 / no Yelp data — usually a stale link
+            const selectableIds = closed.map((d) => d.id);
+            const allSelected = selectableIds.length > 0 && selectableIds.every((id) => closureSelected.has(id));
 
+            if (closed.length === 0 && unreachable.length === 0) {
               return (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <p className="text-xs font-medium text-red-500">{visible.length} permanently closed</p>
-                    {selectableIds.length > 0 && (
+                <div className="flex items-center gap-2 text-sm text-green-500">
+                  <CheckCircle className="w-4 h-4" /> All restaurants are still open on Yelp.
+                </div>
+              );
+            }
+
+            return (
+              <div className="space-y-3">
+                {closed.length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <p className="text-xs font-medium text-red-500">{closed.length} permanently closed</p>
                       <div className="flex items-center gap-2 text-xs">
                         <button onClick={() => setClosureSelected(allSelected ? new Set() : new Set(selectableIds))}
                           className="text-primary hover:underline">{allSelected ? "Deselect all" : `Select all ${selectableIds.length}`}</button>
                         <span className="text-muted-foreground">· {closureSelected.size} selected</span>
                       </div>
-                    )}
-                  </div>
+                    </div>
 
-                  <div className="space-y-1.5">
-                    {visible.map((diff) => {
-                      const displayName = diff.name || diff.yelp_id || diff.yelp_url?.match(/yelp\.com\/biz\/([^?#/]+)/)?.[1] || "Unknown restaurant";
-                      const isKv = kvIds.has(diff.id);
-                      const isSel = closureSelected.has(diff.id);
-
-                      return (
-                        <div key={diff.id} className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 ${
-                          isKv ? "border-red-500/20 bg-red-500/5" : "border-border bg-card/50 opacity-70"
-                        }`}>
-                          {isKv ? (
+                    <div className="space-y-1.5">
+                      {closed.map((diff) => {
+                        const displayName = diff.name || diff.yelp_id || diff.yelp_url?.match(/yelp\.com\/biz\/([^?#/]+)/)?.[1] || "Unknown restaurant";
+                        const isSel = closureSelected.has(diff.id);
+                        return (
+                          <div key={diff.id} className="flex items-center gap-3 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5">
                             <div onClick={() => setClosureSelected((s) => { const n = new Set(s); isSel ? n.delete(diff.id) : n.add(diff.id); return n; })}
                               className={`w-4 h-4 rounded border shrink-0 cursor-pointer flex items-center justify-center ${isSel ? "bg-red-500 border-red-500" : "border-border"}`}>
                               {isSel && <CheckCircle className="w-3 h-3 text-white" />}
                             </div>
-                          ) : (
-                            <ShieldAlert className="w-4 h-4 text-muted-foreground shrink-0" />
-                          )}
-
-                          <div className="flex-1 min-w-0">
-                            <span className="text-sm font-medium line-through text-red-400">{displayName}</span>
-                            {diff.neighborhood && <span className="text-xs text-muted-foreground ml-2">{diff.neighborhood}</span>}
-                            {!isKv && <span className="text-xs text-muted-foreground ml-2 italic">(base JSON — remove manually)</span>}
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-medium line-through text-red-400">{displayName}</span>
+                              {diff.neighborhood && <span className="text-xs text-muted-foreground ml-2">{diff.neighborhood}</span>}
+                            </div>
+                            {diff.yelp_url && (
+                              <a href={diff.yelp_url} target="_blank" rel="noopener noreferrer"
+                                className="text-xs text-primary hover:underline flex items-center gap-1 shrink-0">
+                                Yelp <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
                           </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
 
-                          {diff.yelp_url && (
-                            <a href={diff.yelp_url} target="_blank" rel="noopener noreferrer"
-                              className="text-xs text-primary hover:underline flex items-center gap-1 shrink-0">
-                              Yelp <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
-                        </div>
-                      );
-                    })}
+                {unreachable.length > 0 && (
+                  <div className="flex items-start gap-2 text-xs text-yellow-600 dark:text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2">
+                    <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>
+                      {unreachable.length} couldn&apos;t be verified on Yelp — usually a stale/incorrect Yelp link, not a closure.
+                      Run <span className="font-medium">Re-link from Yelp</span> (below), then re-check.
+                    </span>
                   </div>
+                )}
 
-                  {baseJsonClosed.length > 0 && (
-                    <p className="text-xs text-muted-foreground/70 italic">
-                      {baseJsonClosed.length} restaurant{baseJsonClosed.length !== 1 ? "s are" : " is"} in base JSON and must be removed from <code className="text-xs bg-secondary px-1 rounded">data/restaurants.json</code> manually.
-                    </p>
-                  )}
-
-                  {closureSelected.size > 0 && (
+                {closureSelected.size > 0 && (
                     <div className="flex items-center justify-between gap-3 pt-1 border-t border-border">
                       <p className="text-xs text-muted-foreground">{closureSelected.size} selected for deletion</p>
-                      <button onClick={() => deleteClosureSelected(allRestaurants)} disabled={deleting}
+                      <button onClick={() => deleteClosureSelected()} disabled={deleting}
                         className="flex items-center gap-2 px-3 py-1.5 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors">
                         <ShieldAlert className="w-4 h-4" />
                         {deleting ? "Deleting…" : `Delete ${closureSelected.size} restaurant${closureSelected.size !== 1 ? "s" : ""}`}
@@ -376,8 +463,7 @@ export default function ManageSyncTools({ token, allRestaurants, onUpdated }: Pr
                   )}
                 </div>
               );
-            })()
-        )}
+            })()}
       </div>
 
       {/* ── Section 2: Data sync ──────────────────────────────────────── */}
