@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Search, CheckCircle, AlertTriangle, XCircle, Plus, ExternalLink } from "lucide-react";
+import { Search, CheckCircle, AlertTriangle, XCircle, Plus, ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
 import type { Restaurant } from "@/lib/types";
+import { kbbqConfidence, bizToRestaurantPartial } from "@/lib/yelp-shared";
 import RestaurantForm from "./RestaurantForm";
 
 interface YelpBusiness {
@@ -16,32 +17,7 @@ interface YelpBusiness {
   categories: { alias: string; title: string }[];
 }
 
-const KBBQ_ALIASES = ["koreanbbq", "kbbq", "korean_bbq"];
-
-function kbbqStatus(biz: YelpBusiness): "yes" | "maybe" | "no" {
-  const aliases = biz.categories.map((c) => c.alias.toLowerCase());
-  const titles = biz.categories.map((c) => c.title.toLowerCase());
-  if (aliases.some((a) => KBBQ_ALIASES.includes(a))) return "yes";
-  if (titles.some((t) => t.includes("korean") && t.includes("bbq"))) return "yes";
-  if (aliases.some((a) => a.includes("korean"))) return "maybe";
-  return "no";
-}
-
-function toRestaurantPartial(biz: YelpBusiness): Partial<Restaurant> {
-  return {
-    id: biz.id,
-    name: biz.name,
-    neighborhood: biz.location.city,
-    ayce: true,
-    ayce_tiers: [{ label: "Standard", price: 0 }],
-    non_ayce_est_per_person: null,
-    yelp_rating: biz.rating,
-    google_rating: biz.rating,
-    review_count: biz.review_count,
-    yelp_url: biz.url,
-    notes: "",
-  };
-}
+const CONFIDENCE_TO_STATUS = { high: "yes", medium: "maybe", low: "no" } as const;
 
 const Badge = ({ status }: { status: "yes" | "maybe" | "no" }) => {
   if (status === "yes") return (
@@ -73,6 +49,7 @@ export default function AdminSearchPanel({ token, onAdded }: Props) {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [addTarget, setAddTarget] = useState<Partial<Restaurant> | null>(null);
+  const [showLow, setShowLow] = useState(false);
 
   async function search() {
     if (!query.trim()) return;
@@ -129,11 +106,14 @@ export default function AdminSearchPanel({ token, onAdded }: Props) {
         <p className="text-sm text-muted-foreground text-center py-6">No results found.</p>
       )}
 
-      <div className="space-y-2">
-        {results.map((biz) => {
-          const status = kbbqStatus(biz);
+      {(() => {
+        const mainResults = results.filter((b) => kbbqConfidence(b) !== "low");
+        const lowResults = results.filter((b) => kbbqConfidence(b) === "low");
+
+        const Card = ({ biz }: { biz: YelpBusiness }) => {
+          const status = CONFIDENCE_TO_STATUS[kbbqConfidence(biz)];
           return (
-            <div key={biz.id} className="flex items-start gap-3 bg-secondary border border-border rounded-xl p-3">
+            <div className="flex items-start gap-3 bg-secondary border border-border rounded-xl p-3">
               {biz.image_url && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -159,7 +139,7 @@ export default function AdminSearchPanel({ token, onAdded }: Props) {
               </div>
               <div className="flex flex-col gap-1.5 shrink-0">
                 <button
-                  onClick={() => setAddTarget(toRestaurantPartial(biz))}
+                  onClick={() => setAddTarget(bizToRestaurantPartial(biz))}
                   className="flex items-center gap-1 text-xs px-2.5 py-1 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
                 >
                   <Plus className="w-3 h-3" /> Add
@@ -175,8 +155,31 @@ export default function AdminSearchPanel({ token, onAdded }: Props) {
               </div>
             </div>
           );
-        })}
-      </div>
+        };
+
+        return (
+          <>
+            <div className="space-y-2">
+              {mainResults.map((biz) => <Card key={biz.id} biz={biz} />)}
+            </div>
+
+            {lowResults.length > 0 && (
+              <div className="border border-border rounded-xl overflow-hidden">
+                <button onClick={() => setShowLow((v) => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <span>Not KBBQ ({lowResults.length}) — review</span>
+                  {showLow ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+                {showLow && (
+                  <div className="border-t border-border p-2 space-y-2">
+                    {lowResults.map((biz) => <Card key={biz.id} biz={biz} />)}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* Add form modal */}
       {addTarget && (

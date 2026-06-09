@@ -6,7 +6,9 @@ import type { Restaurant } from "@/lib/types";
 import { KBBQ_PRICE_RANGES } from "@/lib/types";
 import AdminSearchPanel from "@/components/AdminSearchPanel";
 import RestaurantForm from "@/components/RestaurantForm";
-import YelpImportPanel from "@/components/YelpImportPanel";
+import DiscoverPanel from "@/components/DiscoverPanel";
+import ManageSyncTools from "@/components/ManageSyncTools";
+import { isYelpConnected } from "@/lib/yelp-shared";
 
 function getStoredToken() {
   if (typeof window === "undefined") return "";
@@ -22,7 +24,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [editTarget, setEditTarget] = useState<Restaurant | null>(null);
   const [addNew, setAddNew] = useState(false);
-  const [activeTab, setActiveTab] = useState<"search" | "manage" | "import" | "neighborhoods">("manage");
+  const [activeTab, setActiveTab] = useState<"search" | "manage" | "neighborhoods">("manage");
   const [refreshing, setRefreshing] = useState(false);
   const [refreshResult, setRefreshResult] = useState<{ updated: number; notFound: number } | null>(null);
   const [searchFilter, setSearchFilter] = useState("");
@@ -223,7 +225,6 @@ export default function AdminPage() {
         {([
           { key: "manage", label: "Manage" },
           { key: "search", label: "Search & Add" },
-          { key: "import", label: "Yelp Import" },
           { key: "neighborhoods", label: "Neighborhoods" },
         ] as const).map(({ key, label }) => (
           <button key={key} onClick={() => setActiveTab(key)}
@@ -238,6 +239,12 @@ export default function AdminPage() {
       {/* ── Manage tab ── */}
       {activeTab === "manage" && (
         <div className="space-y-4">
+          {/* Yelp sync tools */}
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold text-muted-foreground">Yelp sync &amp; review</h2>
+            <ManageSyncTools token={token} allRestaurants={restaurants} onUpdated={loadRestaurants} />
+          </section>
+
           {/* Toolbar */}
           <div className="flex gap-2 items-center">
             <input value={searchFilter} onChange={(e) => setSearchFilter(e.target.value)}
@@ -281,6 +288,11 @@ export default function AdminPage() {
                         {isKv && (
                           <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded border border-primary/20 shrink-0">KV</span>
                         )}
+                        {isYelpConnected(r) ? (
+                          <span className="text-xs px-1.5 py-0.5 bg-green-500/10 text-green-500 rounded border border-green-500/20 shrink-0">Yelp ✓</span>
+                        ) : (
+                          <span className="text-xs px-1.5 py-0.5 bg-secondary text-muted-foreground rounded border border-border shrink-0">Not linked</span>
+                        )}
                         {!r.price_verified ? (
                           <span title="Price hasn't been manually confirmed — it's estimated from the Yelp price tier or seeded data"
                             className="flex items-center gap-0.5 text-xs text-yellow-500 shrink-0">
@@ -319,27 +331,33 @@ export default function AdminPage() {
 
       {/* ── Search & Add tab ── */}
       {activeTab === "search" && (
-        <AdminSearchPanel
-          token={token}
-          onAdded={(r) => {
-            setRestaurants((prev) => [...prev.filter((x) => x.id !== r.id), r]);
-            setActiveTab("manage");
-          }}
-        />
-      )}
+        <div className="space-y-8">
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold">Search by name</h2>
+            <AdminSearchPanel
+              token={token}
+              onAdded={(r) => {
+                setRestaurants((prev) => [...prev.filter((x) => x.id !== r.id), r]);
+                setActiveTab("manage");
+              }}
+            />
+          </section>
 
-      {/* ── Yelp Import tab ── */}
-      {activeTab === "import" && (
-        <YelpImportPanel
-          token={token}
-          onImported={(imported) => {
-            setRestaurants((prev) => {
-              const ids = new Set(imported.map((r) => r.id));
-              return [...prev.filter((x) => !ids.has(x.id)), ...imported];
-            });
-          }}
-          onUpdated={() => loadRestaurants()}
-        />
+          <div className="border-t border-border" />
+
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold">Discover KBBQ spots nearby</h2>
+            <DiscoverPanel
+              token={token}
+              onImported={(imported) => {
+                setRestaurants((prev) => {
+                  const ids = new Set(imported.map((r) => r.id));
+                  return [...prev.filter((x) => !ids.has(x.id)), ...imported];
+                });
+              }}
+            />
+          </section>
+        </div>
       )}
 
       {/* ── Neighborhoods tab ── */}
