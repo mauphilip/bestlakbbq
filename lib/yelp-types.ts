@@ -52,6 +52,7 @@ export interface RestaurantDiff {
     price_tier: string | null;
     yelp_url: string;
     is_closed: boolean;
+    categories: string[]; // Yelp category aliases e.g. ["koreanbbq", "korean"]
   } | null;
   changes: {
     field: string;

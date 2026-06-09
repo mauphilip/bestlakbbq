@@ -74,7 +74,7 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
   const [syncError, setSyncError] = useState("");
   const [syncStats, setSyncStats] = useState<{ closedCount: number; changedCount: number; upToDateCount: number; errorCount: number } | null>(null);
-  const [syncFilter, setSyncFilter] = useState<"all" | "changed" | "closed">("changed");
+  const [syncFilter, setSyncFilter] = useState<"all" | "changed" | "closed">("all");
 
   // Load cached discover on mount
   useEffect(() => { loadDiscover(false); }, []); // eslint-disable-line
@@ -105,9 +105,10 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
       const res = await fetch(`/api/restaurants/yelp-discover${force ? "?refresh=1" : ""}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      const text = await res.text();
+      let data: Record<string, unknown>;
+      try { data = JSON.parse(text); } catch { throw new Error(text || `HTTP ${res.status}`); }
+      if (!res.ok || data.error) throw new Error((data.error as string) ?? `HTTP ${res.status}`);
       const cands: DiscoverCandidate[] = data.candidates ?? [];
       setCandidates(cands);
       setLastFetched(data.lastFetched ?? null);
@@ -172,9 +173,10 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({}),
       });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      const text = await res.text();
+      let data: Record<string, unknown>;
+      try { data = JSON.parse(text); } catch { throw new Error(text || `HTTP ${res.status}`); }
+      if (!res.ok || data.error) throw new Error((data.error as string) ?? `HTTP ${res.status}`);
       setDiffs(data.results ?? []);
       setSyncStats({
         closedCount: data.closedCount, changedCount: data.changedCount,
@@ -460,7 +462,7 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
               </div>
 
               {/* Filter + bulk controls */}
-              {diffsWithChanges.length > 0 && (
+              {diffs && diffs.length > 0 && (
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div className="flex gap-2 text-xs">
                     {([["changed", "Changes only"], ["closed", "Closed only"], ["all", "All restaurants"]] as const).map(([v, label]) => (
@@ -485,12 +487,13 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
               {filteredDiffs.length > 0 ? (
                 <>
                   {/* Header */}
-                  <div className="hidden md:grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-x-4 px-3 py-2 text-xs font-medium text-muted-foreground border-b border-border">
+                  <div className="hidden md:grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto] gap-x-4 px-3 py-2 text-xs font-medium text-muted-foreground border-b border-border">
                     <span />
                     <span>Restaurant</span>
                     <span className="text-right">Rating</span>
                     <span className="text-right">Reviews</span>
                     <span className="text-right">Tier</span>
+                    <span>Yelp Categories</span>
                     <span />
                   </div>
 
@@ -541,7 +544,7 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
                           </div>
 
                           {/* Desktop layout */}
-                          <div className="hidden md:grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-x-4 items-center">
+                          <div className="hidden md:grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto] gap-x-4 items-center">
                             {hasChanges && !diff.now_closed && !isApplied ? (
                               <div onClick={() => setSelectedSync((s) => { const n = new Set(s); isSel ? n.delete(diff.id) : n.add(diff.id); return n; })}
                                 className={`w-4 h-4 rounded border cursor-pointer flex items-center justify-center ${isSel ? "bg-primary border-primary" : "border-border"}`}>
@@ -585,6 +588,15 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
                                   next={tierChange ? (tierChange.new as string) : diff.current.price_tier}
                                 />
                               ) : <span className="text-muted-foreground/40">—</span>}
+                            </div>
+
+                            {/* Yelp categories */}
+                            <div className="text-xs text-muted-foreground flex flex-wrap gap-1">
+                              {diff.yelp?.categories?.map((cat) => (
+                                <span key={cat} className={`px-1.5 py-0.5 rounded border ${cat === "koreanbbq" ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 font-medium" : "bg-secondary border-border"}`}>
+                                  {cat}
+                                </span>
+                              )) ?? <span className="text-muted-foreground/40">—</span>}
                             </div>
 
                             <div className="flex items-center gap-1 justify-end">

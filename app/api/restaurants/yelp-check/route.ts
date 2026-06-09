@@ -12,11 +12,15 @@ function delay(ms: number) {
 }
 
 async function fetchYelpBiz(id: string): Promise<Record<string, unknown> | null> {
-  const res = await fetch(`${YELP_API}/businesses/${id}`, {
-    headers: { Authorization: `Bearer ${process.env.YELP_API_KEY}` },
-  });
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    const res = await fetch(`${YELP_API}/businesses/${id}`, {
+      headers: { Authorization: `Bearer ${process.env.YELP_API_KEY}` },
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
 }
 
 function getYelpId(r: Restaurant): string | null {
@@ -30,7 +34,6 @@ async function checkAll(restaurants: Restaurant[]): Promise<RestaurantDiff[]> {
 
   for (const r of restaurants) {
     const yid = getYelpId(r);
-
     const current = {
       rating: r.yelp_rating,
       review_count: r.review_count,
@@ -43,72 +46,65 @@ async function checkAll(restaurants: Restaurant[]): Promise<RestaurantDiff[]> {
         id: r.id, name: r.name, neighborhood: r.neighborhood,
         yelp_id: null, yelp_url: r.yelp_url ?? "",
         current, yelp: null, changes: [], now_closed: false,
-        error: "No Yelp ID — run Sync from Yelp first to populate",
+        error: "No Yelp ID — run Sync from Yelp first",
       });
       continue;
     }
 
-    try {
-      const biz = await fetchYelpBiz(yid);
-      await delay(250);
+    const biz = await fetchYelpBiz(yid);
+    await delay(100); // 100ms between requests to stay within rate limits
 
-      if (!biz) {
-        results.push({
-          id: r.id, name: r.name, neighborhood: r.neighborhood,
-          yelp_id: yid, yelp_url: r.yelp_url ?? "",
-          current, yelp: null, changes: [], now_closed: false,
-          error: "Yelp returned no data (listing may have been removed)",
-        });
-        continue;
-      }
-
-      const isClosed = !!(biz.is_closed);
-      const yelpRating = (biz.rating as number) ?? null;
-      const yelpReviews = (biz.review_count as number) ?? null;
-      const yelpPrice = (biz.price as string) ?? null;
-      const yelpUrl = (biz.url as string)?.split("?")[0] ?? null;
-
-      const yelpSnap = {
-        rating: yelpRating,
-        review_count: yelpReviews,
-        price_tier: yelpPrice,
-        yelp_url: yelpUrl ?? r.yelp_url ?? "",
-        is_closed: isClosed,
-      };
-
-      const changes: RestaurantDiff["changes"] = [];
-
-      if (isClosed) {
-        changes.push({ field: "is_closed", label: "Status", old: "Open", new: "Permanently Closed" });
-      }
-      if (yelpRating !== null && Math.abs(yelpRating - r.yelp_rating) >= 0.1) {
-        changes.push({ field: "yelp_rating", label: "Rating", old: r.yelp_rating, new: yelpRating });
-      }
-      if (yelpReviews !== null && yelpReviews !== r.review_count) {
-        changes.push({ field: "review_count", label: "Reviews", old: r.review_count, new: yelpReviews });
-      }
-      if (yelpPrice && yelpPrice !== (r.price_tier ?? null)) {
-        changes.push({ field: "price_tier", label: "Price Tier", old: r.price_tier ?? "—", new: yelpPrice });
-      }
-      if (yelpUrl && r.yelp_url && yelpUrl !== r.yelp_url.split("?")[0]) {
-        changes.push({ field: "yelp_url", label: "Yelp URL", old: r.yelp_url, new: yelpUrl });
-      }
-
+    if (!biz) {
       results.push({
         id: r.id, name: r.name, neighborhood: r.neighborhood,
         yelp_id: yid, yelp_url: r.yelp_url ?? "",
-        current, yelp: yelpSnap, changes, now_closed: isClosed,
+        current, yelp: null, changes: [], now_closed: false,
+        error: "Yelp returned no data",
       });
-    } catch (e) {
-      results.push({
-        id: r.id, name: r.name, neighborhood: r.neighborhood,
-        yelp_id: yid, yelp_url: r.yelp_url ?? "",
-        current, yelp: null, changes: [], now_closed: false, error: String(e),
-      });
+      continue;
     }
+
+    const isClosed = !!(biz.is_closed);
+    const yelpRating = (biz.rating as number) ?? null;
+    const yelpReviews = (biz.review_count as number) ?? null;
+    const yelpPrice = (biz.price as string) ?? null;
+    const yelpUrl = (biz.url as string)?.split("?")[0] ?? null;
+    const categories = ((biz.categories as { alias: string; title: string }[]) ?? []).map((c) => c.alias);
+
+    const yelpSnap = {
+      rating: yelpRating,
+      review_count: yelpReviews,
+      price_tier: yelpPrice,
+      yelp_url: yelpUrl ?? r.yelp_url ?? "",
+      is_closed: isClosed,
+      categories,
+    };
+
+    const changes: RestaurantDiff["changes"] = [];
+
+    if (isClosed) {
+      changes.push({ field: "is_closed", label: "Status", old: "Open", new: "Permanently Closed" });
+    }
+    if (yelpRating !== null && Math.abs(yelpRating - r.yelp_rating) >= 0.1) {
+      changes.push({ field: "yelp_rating", label: "Rating", old: r.yelp_rating, new: yelpRating });
+    }
+    if (yelpReviews !== null && yelpReviews !== r.review_count) {
+      changes.push({ field: "review_count", label: "Reviews", old: r.review_count, new: yelpReviews });
+    }
+    if (yelpPrice && yelpPrice !== (r.price_tier ?? null)) {
+      changes.push({ field: "price_tier", label: "Price Tier", old: r.price_tier ?? "—", new: yelpPrice });
+    }
+    if (yelpUrl && r.yelp_url && yelpUrl !== r.yelp_url.split("?")[0]) {
+      changes.push({ field: "yelp_url", label: "Yelp URL", old: r.yelp_url, new: yelpUrl });
+    }
+
+    results.push({
+      id: r.id, name: r.name, neighborhood: r.neighborhood,
+      yelp_id: yid, yelp_url: r.yelp_url ?? "",
+      current, yelp: yelpSnap, changes, now_closed: isClosed,
+    });
   }
 
-  // Sort: closed first → changed → up-to-date → errors
   results.sort((a, b) => {
     if (a.now_closed !== b.now_closed) return a.now_closed ? -1 : 1;
     if ((a.changes.length > 0) !== (b.changes.length > 0)) return a.changes.length > 0 ? -1 : 1;
@@ -120,26 +116,23 @@ async function checkAll(restaurants: Restaurant[]): Promise<RestaurantDiff[]> {
 }
 
 // POST /api/restaurants/yelp-check
-// Body: { ids?: string[] } — omit ids to check all restaurants
 export async function POST(req: NextRequest) {
   if (!verifyAdminToken(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   if (!process.env.YELP_API_KEY) {
-    return NextResponse.json({ error: "YELP_API_KEY not configured" }, { status: 500 });
+    return NextResponse.json({ error: "YELP_API_KEY is not set on the server. Add it in Vercel → Project Settings → Environment Variables." }, { status: 500 });
   }
 
   const body = await req.json().catch(() => ({}));
   const filterIds: string[] = body.ids ?? [];
 
-  let base: Restaurant[] = [];
+  // KV failure is non-fatal — fall back to base JSON only
+  const base = baseRestaurants as Restaurant[];
   let kv: Restaurant[] = [];
   try {
-    base = baseRestaurants as Restaurant[];
     kv = (await getKVRestaurants()) as unknown as Restaurant[];
-  } catch (e) {
-    return NextResponse.json({ error: `DB error: ${e}` }, { status: 500 });
-  }
+  } catch { /* ignore */ }
 
   let all = [...base, ...kv];
   if (filterIds.length) all = all.filter((r) => filterIds.includes(r.id));
@@ -161,10 +154,9 @@ export async function GET(req: NextRequest) {
   if (!verifyAdminToken(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const fakePost = new NextRequest(req.url, {
+  return POST(new NextRequest(req.url, {
     method: "POST",
     headers: req.headers,
     body: JSON.stringify({}),
-  });
-  return POST(fakePost);
+  }));
 }
