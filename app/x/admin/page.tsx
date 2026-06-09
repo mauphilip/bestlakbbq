@@ -308,6 +308,7 @@ export default function AdminPage() {
               return [...prev.filter((x) => !ids.has(x.id)), ...imported];
             });
           }}
+          onUpdated={() => loadRestaurants()}
         />
       )}
 
