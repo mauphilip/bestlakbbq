@@ -68,13 +68,8 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* About card */}
-      <section className="px-4 sm:px-6 pb-6 max-w-6xl mx-auto">
-        <AboutCard restaurants={restaurants} />
-      </section>
-
       {/* Chart section */}
-      <section className="px-4 sm:px-6 pb-16 max-w-6xl mx-auto">
+      <section className="px-4 sm:px-6 pb-10 max-w-6xl mx-auto">
         <div className="flex items-center gap-3 mb-5">
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
             Cost vs. Popularity
@@ -98,11 +93,22 @@ export default async function Home() {
         </div>
 
         <p className="text-xs text-muted-foreground mt-4 text-center">
-          ● circle = AYCE · ▲ triangle = Non-AYCE · color = cost tier ·{" "}
-          <a href="/list" className="hover:text-foreground transition-colors underline underline-offset-2">
-            View as list →
-          </a>
+          ● circle = AYCE · ▲ triangle = Non-AYCE · color = cost tier
         </p>
+      </section>
+
+      {/* FAQ — how to read + about the data */}
+      <section className="px-4 sm:px-6 pb-16 max-w-3xl mx-auto">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+            How to read this chart
+          </div>
+          <div className="flex-1 h-px bg-border" />
+          <a href="/faq" className="text-xs text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2">
+            Full FAQ →
+          </a>
+        </div>
+        <AboutCard restaurants={restaurants} />
       </section>
     </div>
   );

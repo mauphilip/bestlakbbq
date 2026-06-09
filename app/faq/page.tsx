@@ -53,10 +53,10 @@ const faqs: { q: string; a: React.ReactNode }[] = [
     q: "What does the color mean?",
     a: (
       <ul className="text-sm text-muted-foreground space-y-1 list-none">
-        <li><span className="font-medium" style={{ color: "#f5c842" }}>Gold/Yellow</span> = under $25/pp</li>
-        <li><span className="font-medium" style={{ color: "#f5a623" }}>Orange</span> = $25–$34/pp</li>
-        <li><span className="font-medium" style={{ color: "#e8613c" }}>Coral</span> = $35–$44/pp</li>
-        <li><span className="font-medium" style={{ color: "#8b1a2e" }}>Dark Red/Maroon</span> = $45+/pp</li>
+        <li><span className="font-medium" style={{ color: "#f59e0b" }}>Gold</span> = under $35/pp (budget)</li>
+        <li><span className="font-medium" style={{ color: "#f97316" }}>Orange</span> = $35–$44/pp (mid-range)</li>
+        <li><span className="font-medium" style={{ color: "#ef4444" }}>Coral/Red</span> = $45–$59/pp (premium)</li>
+        <li><span className="font-medium" style={{ color: "#991b1b" }}>Dark Red/Maroon</span> = $60+/pp (high-end)</li>
       </ul>
     ),
   },

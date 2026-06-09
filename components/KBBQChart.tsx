@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, type CSSProperties } from "react";
 import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea,
@@ -35,6 +35,17 @@ function costColor(cost: number): string {
   if (cost < 45) return "#f97316";       // orange (mid)
   if (cost < 60) return "#ef4444";       // coral/red (premium)
   return "#991b1b";                      // dark red / maroon
+}
+
+/**
+ * A safe Yelp link that never 404s: use the stored canonical /biz/ URL when present,
+ * otherwise fall back to a Yelp search by name + neighborhood.
+ */
+function yelpLink(r: Restaurant): string {
+  if (r.yelp_url && /yelp\.com\/biz\//.test(r.yelp_url)) return r.yelp_url;
+  const desc = encodeURIComponent(r.name);
+  const loc = encodeURIComponent(`${r.neighborhood ? r.neighborhood + ", " : ""}Los Angeles, CA`);
+  return `https://www.yelp.com/search?find_desc=${desc}&find_loc=${loc}`;
 }
 
 interface TooltipProps { active?: boolean; payload?: Array<{ payload: ChartPoint }> }
@@ -79,9 +90,7 @@ function CustomTooltip({ active, payload }: TooltipProps) {
           ))}
         </div>
       )}
-      {r.yelp_url && (
-        <p className="mt-2 text-xs text-muted-foreground/60 italic">Click dot to open Yelp</p>
-      )}
+      <p className="mt-2 text-xs text-muted-foreground/60 italic">Click dot to open Yelp</p>
     </div>
   );
 }
@@ -95,15 +104,14 @@ function DotWithLabel(props: {
   const { r, isAyce, color, opacity, restaurant } = payload;
 
   function handleClick() {
-    if (restaurant.yelp_url) window.open(restaurant.yelp_url, "_blank", "noopener,noreferrer");
+    window.open(yelpLink(restaurant), "_blank", "noopener,noreferrer");
   }
 
-  const clickable = !!restaurant.yelp_url;
   const shapeProps = {
     fill: color, fillOpacity: opacity * 0.85,
     stroke: color, strokeOpacity: opacity, strokeWidth: 1.5,
-    style: clickable ? { cursor: "pointer" } : undefined,
-    onClick: clickable ? handleClick : undefined,
+    style: { cursor: "pointer", outline: "none", WebkitTapHighlightColor: "transparent" } as CSSProperties,
+    onClick: handleClick,
   };
 
   const shape = isAyce ? (
@@ -379,7 +387,7 @@ export default function KBBQChart({ restaurants }: Props) {
       {controls}
 
       {/* Chart */}
-      <div className="w-full h-[760px] bg-card/50 rounded-xl border border-border p-3">
+      <div className="w-full h-[760px] bg-card/50 rounded-xl border border-border p-3 select-none [&_*]:outline-none">
         {chartContent}
       </div>
 
@@ -402,10 +410,8 @@ export default function KBBQChart({ restaurants }: Props) {
                 <span className="text-muted-foreground shrink-0">{d.isAyce ? "AYCE" : "Non-AYCE"}</span>
                 <span className="font-medium shrink-0">${d.y}/pp</span>
                 <span className="text-muted-foreground shrink-0">★ {d.x.toFixed(2)}</span>
-                {d.restaurant.yelp_url && (
-                  <a href={d.restaurant.yelp_url} target="_blank" rel="noopener noreferrer"
-                    className="text-primary hover:underline shrink-0">Yelp →</a>
-                )}
+                <a href={yelpLink(d.restaurant)} target="_blank" rel="noopener noreferrer"
+                  className="text-primary hover:underline shrink-0">Yelp →</a>
               </div>
             ))}
           </div>
@@ -454,7 +460,7 @@ export default function KBBQChart({ restaurants }: Props) {
             <div className="flex items-center gap-1.5"><svg width="10" height="10" viewBox="0 0 12 12"><polygon points="6,1 11,11 1,11" fill="#ef4444" fillOpacity="0.85" /></svg>Triangle = Non-AYCE (est.)</div>
             <div className="flex items-center gap-1.5 text-muted-foreground/60">Bubble size = review count</div>
             <div className="flex items-center gap-3 ml-auto">
-              {[["< $25", "#f59e0b"], ["$25–34", "#f97316"], ["$35–44", "#ef4444"], ["$45+", "#991b1b"]].map(([label, color]) => (
+              {[["< $35", "#f59e0b"], ["$35–44", "#f97316"], ["$45–59", "#ef4444"], ["$60+", "#991b1b"]].map(([label, color]) => (
                 <div key={label} className="flex items-center gap-1">
                   <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: color }} />
                   {label}
@@ -464,7 +470,7 @@ export default function KBBQChart({ restaurants }: Props) {
           </div>
 
           {/* FS chart */}
-          <div className="flex-1 p-4">
+          <div className="flex-1 p-4 select-none [&_*]:outline-none">
             <ChartInner data={data} avgRating={avgRating} avgCost={avgCost} showLabels={true} isFullscreen={true} xDomain={xDomain} yDomain={yDomain} isDark={isDark} />
           </div>
         </div>
