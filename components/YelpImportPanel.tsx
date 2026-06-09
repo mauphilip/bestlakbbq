@@ -59,6 +59,7 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
   const [importing, setImporting] = useState(false);
   const [importedCount, setImportedCount] = useState(0);
   const [discoverError, setDiscoverError] = useState("");
+  const [discoverWarnings, setDiscoverWarnings] = useState<string[]>([]);
   const [showTracked, setShowTracked] = useState(false);
   const [showLowConf, setShowLowConf] = useState(false);
   const [lastFetched, setLastFetched] = useState<string | null>(null);
@@ -100,6 +101,7 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
   async function loadDiscover(force: boolean) {
     setDiscovering(true);
     setDiscoverError("");
+    setDiscoverWarnings([]);
     if (force) { setCandidates([]); setSelectedImport(new Set()); setImportedCount(0); }
     try {
       const res = await fetch(`/api/restaurants/yelp-discover${force ? "?refresh=1" : ""}`, {
@@ -110,15 +112,28 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
       let data: any;
       try { data = JSON.parse(text); } catch { throw new Error(text || `HTTP ${res.status}`); }
       if (!res.ok || data.error) throw new Error((data.error as string) ?? `HTTP ${res.status}`);
+
       const cands: DiscoverCandidate[] = data.candidates ?? [];
+      const warnings: string[] = data.errors ?? [];
+
+      // If Yelp returned errors for every location and no results came back, treat as failure
+      if (force && cands.length === 0 && warnings.length > 0) {
+        throw new Error(`Yelp API returned errors for all locations:\n${warnings.slice(0, 3).join("\n")}${warnings.length > 3 ? `\n…and ${warnings.length - 3} more` : ""}`);
+      }
+
       setCandidates(cands);
       setLastFetched(data.lastFetched ?? null);
       setFromCache(!!data.fromCache);
+      if (warnings.length) setDiscoverWarnings(warnings);
+
       const autoSelect = new Set<string>(
         cands.filter((c) => !c.already_tracked && !c.is_closed && c.kbbq_confidence === "high").map((c) => c.yelp_id)
       );
       setSelectedImport(autoSelect);
-    } catch (e) { setDiscoverError(String(e)); }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setDiscoverError(msg);
+    }
     setDiscovering(false);
   }
 
@@ -282,10 +297,24 @@ export default function YelpImportPanel({ token, onImported, onUpdated }: Props)
 
           {discoverError && <ErrorBox msg={discoverError} />}
 
-          {discovering && <LoadingSpinner label="Searching Yelp across 8 locations (2 passes each)… ~30–60s" />}
+          {discoverWarnings.length > 0 && !discoverError && (
+            <div className="text-xs text-yellow-600 dark:text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2 space-y-0.5">
+              <p className="font-medium">⚠ Some Yelp searches had partial errors — results may be incomplete:</p>
+              {discoverWarnings.slice(0, 5).map((w, i) => <p key={i} className="opacity-80">{w}</p>)}
+              {discoverWarnings.length > 5 && <p className="opacity-60">…and {discoverWarnings.length - 5} more</p>}
+            </div>
+          )}
+
+          {discovering && <LoadingSpinner label="Searching Yelp across 8 locations… ~20–40s" />}
 
           {importedCount > 0 && (
             <SuccessBox msg={`${importedCount} restaurants added to your database`} />
+          )}
+
+          {!discovering && lastFetched && !fromCache && candidates.length === 0 && !discoverError && (
+            <div className="text-sm text-center py-6 text-muted-foreground border border-border rounded-xl">
+              Yelp returned 0 results. Check that <code className="text-xs bg-secondary px-1 py-0.5 rounded">YELP_API_KEY</code> is set in Vercel environment variables.
+            </div>
           )}
 
           {candidates.length > 0 && !discovering && (
