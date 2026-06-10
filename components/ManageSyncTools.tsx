@@ -5,7 +5,7 @@ import {
   RefreshCw, CheckCircle, ExternalLink,
   Clock, ShieldAlert, ArrowRight,
 } from "lucide-react";
-import { isYelpConnected } from "@/lib/yelp-shared";
+import { getYelpId } from "@/lib/yelp-shared";
 import type { Restaurant } from "@/lib/types";
 import type { RestaurantDiff } from "@/lib/yelp-types";
 
@@ -374,11 +374,18 @@ export default function ManageSyncTools({ token, restaurants, onUpdated, onEditR
             {(() => {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const rows: any[] = relinkResult.results ?? [];
-              // Linked-since-scan (e.g. via "Link manually") and deleted rows drop off — no rescan needed.
-              const linkedIds = new Set(restaurants.filter((x) => isYelpConnected(x)).map((x) => x.id));
-              const gone = (id: string) => relinkRemoved.has(id) || linkedIds.has(id);
-              const weak = rows.filter((r) => r.status === "weak" && !gone(r.id));
-              const noMatch = rows.filter((r) => r.status === "no_match" && !gone(r.id));
+              // A row drops off only when it's been DELETED, or its Yelp link has CHANGED
+              // since the scan (i.e. you re-linked it). A pre-existing stale link does NOT
+              // count as "handled" — otherwise no-match rows would never show up to process.
+              const currentLink = new Map(restaurants.map((x) => [x.id, getYelpId(x)]));
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const gone = (row: any) => {
+                if (relinkRemoved.has(row.id)) return true;
+                const now = currentLink.get(row.id);
+                return now != null && now !== row.cur_slug; // re-linked since the scan
+              };
+              const weak = rows.filter((r) => r.status === "weak" && !gone(r));
+              const noMatch = rows.filter((r) => r.status === "no_match" && !gone(r));
               const confident = rows.filter((r) => r.status === "confident");
               if (!weak.length && !noMatch.length && !confident.length) return null;
               return (
