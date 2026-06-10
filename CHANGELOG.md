@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 - **Editable neighborhood ↔ zip map** (Neighborhoods tab) — the whole zip→neighborhood map now lives in the database as one editable source of truth (replacing the hardcoded map + overrides). Two views (grouped by neighborhood, and a flat zip list), full CRUD, and multi-select bulk assign/delete (e.g. assign several zips to Koreatown at once). Yelp Discover classifies neighborhoods from this map.
 
 ### Changed
+- **Per-row "Re-check" in Sync from Yelp** — re-check a single restaurant against Yelp (one call) right after you edit/relink it, instead of re-running the whole sync. The row updates in place.
+- **Better rate-limit message** — when Yelp returns 429 it now reports *when it resumes* using Yelp's own reset/retry headers, and points to the Yelp Connector for your remaining quota (which reflects your actual daily limit, e.g. a higher trial limit).
+- Neighborhoods flat list sort is now **Zip ascending / descending** (the by-neighborhood option was confusing — grouping already lives in the Grouped view).
 - **Fewer Yelp API calls.** The Yelp Connector no longer auto-pings Yelp every time you open it — it shows the last cached quota and only spends an API call when you click "Check now / Refresh." (Sync, Discover-refresh, and the form's Find/Sync remain user-triggered; opening Discover only reads the cache.)
 - **Neighborhoods tab polish:** removed the redundant "Zip → Neighborhood map" header; grouped view is now a compact, responsive card grid; flat list has a **sort by Zip / Neighborhood** toggle (Zip ascending by default).
 - **Unified "Sync from Yelp"** — the separate "Check Closed" and "Sync Updates" tools are now one pass. It surfaces data updates to apply (bulk, multi-select), Yelp-confirmed closures to remove (per-row Delete, **never auto-selected**), and broken links to fix. Also fixes stale cached counts lingering between the two old tools.
