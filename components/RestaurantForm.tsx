@@ -278,8 +278,8 @@ export default function RestaurantForm({ initial, token, onClose, onSaved }: Pro
                       className="flex-1 bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
                     <div className="flex items-center gap-1">
                       <span className="text-muted-foreground text-sm">$</span>
-                      <input type="number" value={tier.price} onChange={(e) => updateTier(i, "price", e.target.value)}
-                        className="w-20 bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                      <input type="number" inputMode="numeric" value={tier.price} onChange={(e) => updateTier(i, "price", e.target.value)}
+                        className="w-20 bg-secondary border border-border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                     </div>
                     {tiers.length > 1 && (
                       <button onClick={() => removeTier(i)} className="text-muted-foreground hover:text-red-400">
@@ -295,9 +295,9 @@ export default function RestaurantForm({ initial, token, onClose, onSaved }: Pro
             ) : (
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground text-sm">$</span>
-                <input type="number" value={nonAyceCost} onChange={(e) => setNonAyceCost(Number(e.target.value))}
+                <input type="number" inputMode="numeric" value={nonAyceCost} onChange={(e) => setNonAyceCost(Number(e.target.value))}
                   placeholder="e.g. 45"
-                  className="flex-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                  className="flex-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                 <span className="text-muted-foreground text-sm">per person</span>
               </div>
             )}

@@ -219,6 +219,7 @@ export default function AdminPage() {
           {manageTab === "sync" && (
             <ManageSyncTools
               token={token}
+              restaurants={restaurants}
               onUpdated={loadRestaurants}
               onEditRestaurant={(id) => {
                 const r = restaurants.find((x) => x.id === id);

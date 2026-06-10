@@ -8,6 +8,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 ### Added
 - Optional **Website** field on restaurants — set it in the admin form; shown as a 🌐 link in the directory list, the chart's "Premium / not on chart" panel, and the edit form. (Yelp's API doesn't expose a business's own site, so it's entered manually.)
 
+### Changed
+- **Multi-tier AYCE restaurants now plot at the _average_ of their tiers** (was the cheapest tier); the tooltip shows the full range and the plotted average. Updated the homepage/FAQ copy to match.
+- Re-link "needs a manual check" rows now **drop off automatically once linked or deleted** — no rescan required.
+- Removed the up/down spinner arrows from the AYCE tier / non-AYCE price inputs.
+
 ## [0.2.0] — 2026-06-09
 
 ### Added

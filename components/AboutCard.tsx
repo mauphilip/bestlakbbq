@@ -3,7 +3,7 @@ import { ExternalLink } from "lucide-react";
 
 const HOW_TO_READ = [
   { icon: "→", label: "X-axis (horizontal)", desc: "Yelp rating — higher is better." },
-  { icon: "↑", label: "Y-axis (vertical)", desc: "Cost per person — AYCE uses the entry-level tier price; Non-AYCE is an estimated spend for a typical group order." },
+  { icon: "↑", label: "Y-axis (vertical)", desc: "Cost per person — AYCE uses the average of the menu tiers; Non-AYCE is an estimated spend for a typical group order." },
   { icon: "⬤", label: "Bubble size", desc: "Review count from Yelp. Bigger = more reviews = stronger signal." },
   { icon: "●", label: "Circles", desc: "All-you-can-eat (AYCE) restaurants." },
   { icon: "▲", label: "Triangles", desc: "Non-AYCE restaurants (set menu or à la carte)." },
@@ -88,7 +88,7 @@ export default function AboutCard({ restaurants }: { restaurants: Restaurant[] }
             by Rajesh Nitityanandan, expanded with additional spots and updated prices.
           </p>
           <p>
-            Ratings are from Yelp. AYCE prices use the entry-level tier. Non-AYCE costs are estimated from the most common set or a typical 2–3 person order — treat them as ballpark figures until manually verified.
+            Ratings are from Yelp. AYCE cost is the average of the menu tiers (hover a bubble for the full range). Non-AYCE costs are estimated from the most common set or a typical 2–3 person order — treat them as ballpark figures until manually verified.
           </p>
           <p>
             <span className="font-medium text-foreground">AYCE vs Non-AYCE</span> isn&apos;t something Yelp reports, so it&apos;s set by hand — newly added spots may need their type confirmed.
