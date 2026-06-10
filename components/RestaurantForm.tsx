@@ -11,6 +11,7 @@ interface Props {
   token: string;
   onClose: () => void;
   onSaved: (r: Restaurant) => void;
+  onDeleted?: (id: string) => void;
 }
 
 function slugify(s: string) {
@@ -25,7 +26,7 @@ const NEIGHBORHOODS = [
 
 const PRICE_TIERS: PriceTier[] = ["$$", "$$$", "$$$$"];
 
-export default function RestaurantForm({ initial, token, onClose, onSaved }: Props) {
+export default function RestaurantForm({ initial, token, onClose, onSaved, onDeleted }: Props) {
   const isNew = !initial?.id;
 
   const [name, setName] = useState(initial?.name ?? "");
@@ -171,6 +172,22 @@ export default function RestaurantForm({ initial, token, onClose, onSaved }: Pro
     } else {
       setError("Failed to save. Check your admin token.");
     }
+  }
+
+  async function handleDelete() {
+    if (!initial?.id) return;
+    if (!confirm(`Delete "${name}"? This removes it from the list.`)) return;
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/restaurants/${initial.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) { onDeleted?.(initial.id); onClose(); return; }
+      setError("Failed to delete. Check your admin token.");
+    } catch { setError("Failed to delete."); }
+    setSaving(false);
   }
 
   const yelpMenuUrl = yelpUrl ? yelpUrl.replace(/\?.*/, "") + "?osq=Menu" : null;
@@ -442,13 +459,19 @@ export default function RestaurantForm({ initial, token, onClose, onSaved }: Pro
         </div>
 
         {/* Footer */}
-        <div className="flex gap-2 p-5 pt-0 sticky bottom-0 bg-card">
+        <div className="flex items-center gap-2 p-5 pt-0 sticky bottom-0 bg-card">
+          {!isNew && (
+            <button onClick={handleDelete} disabled={saving}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-500/30 text-red-400 text-sm hover:bg-red-500/10 disabled:opacity-50 transition-colors mr-auto">
+              <Trash2 className="w-4 h-4" /> Delete
+            </button>
+          )}
           <button onClick={onClose}
-            className="flex-1 py-2 rounded-lg border border-border text-sm hover:bg-foreground/5 transition-colors">
+            className={`${isNew ? "flex-1" : ""} px-4 py-2 rounded-lg border border-border text-sm hover:bg-foreground/5 transition-colors`}>
             Cancel
           </button>
           <button onClick={handleSave} disabled={saving}
-            className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50">
+            className={`${isNew ? "flex-1" : ""} px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50`}>
             {saving ? "Saving…" : isNew ? "Add Restaurant" : "Save Changes"}
           </button>
         </div>

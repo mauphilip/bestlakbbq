@@ -5,17 +5,12 @@ import {
   RefreshCw, CheckCircle, ExternalLink,
   Clock, ShieldAlert, ArrowRight,
 } from "lucide-react";
-import { getYelpId } from "@/lib/yelp-shared";
 import type { Restaurant } from "@/lib/types";
 import type { RestaurantDiff } from "@/lib/yelp-types";
 
 interface Props {
   token: string;
-  /** Live restaurant list — used to drop now-linked rows off the re-link list without rescanning. */
-  restaurants: Restaurant[];
   onUpdated?: () => void;
-  /** Open the edit form for a restaurant (used by "Link manually" on re-link stragglers). */
-  onEditRestaurant?: (id: string) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -41,17 +36,7 @@ function DiffValue({
   );
 }
 
-export default function ManageSyncTools({ token, restaurants, onUpdated, onEditRestaurant }: Props) {
-  // ── Re-link from Yelp ──────────────────────────────────────────────────────────
-  const [relinking, setRelinking] = useState(false);
-  const [relinkError, setRelinkError] = useState("");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [relinkResult, setRelinkResult] = useState<any | null>(null);
-  const [relinkDryRun, setRelinkDryRun] = useState(true);
-  const [relinkLastScanned, setRelinkLastScanned] = useState<string | null>(null);
-  const [relinkRemoved, setRelinkRemoved] = useState<Set<string>>(new Set()); // rows linked/deleted this session
-  const [relinkBusy, setRelinkBusy] = useState<string | null>(null); // id being deleted
-
+export default function ManageSyncTools({ token, onUpdated }: Props) {
   // ── Closure check ────────────────────────────────────────────────────────────
   const [closureRunning, setClosureRunning] = useState(false);
   const [closureResults, setClosureResults] = useState<RestaurantDiff[] | null>(null);
@@ -72,20 +57,8 @@ export default function ManageSyncTools({ token, restaurants, onUpdated, onEditR
   const [syncStats, setSyncStats] = useState<{ changedCount: number; upToDateCount: number; errorCount: number } | null>(null);
   const [syncLastChecked, setSyncLastChecked] = useState<string | null>(null);
 
-  // Restore cached sync/closure/relink results
+  // Restore cached sync/closure results
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem("kbbq_relink_cache");
-      if (raw) {
-        const cached = JSON.parse(raw);
-        if (cached?.result) {
-          setRelinkResult(cached.result);
-          setRelinkDryRun(cached.result.dryRun ?? true);
-          setRelinkLastScanned(cached.timestamp ?? null);
-          setRelinkRemoved(new Set<string>(cached.removed ?? []));
-        }
-      }
-    } catch { /* ignore */ }
     try {
       const raw = sessionStorage.getItem("kbbq_closure_cache");
       if (raw) {
@@ -117,53 +90,6 @@ export default function ManageSyncTools({ token, restaurants, onUpdated, onEditR
   const diffsWithChanges = diffs?.filter((d) => d.changes.length > 0) ?? [];
 
   // ── Closure check action ──────────────────────────────────────────────────────
-  async function runRelink(dryRun: boolean) {
-    setRelinking(true);
-    setRelinkError("");
-    setRelinkDryRun(dryRun);
-    if (dryRun) setRelinkResult(null);
-    try {
-      const res = await fetch("/api/restaurants/relink", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ dryRun }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? `HTTP ${res.status}`);
-      const timestamp = new Date().toISOString();
-      setRelinkResult(data);
-      setRelinkLastScanned(timestamp);
-      setRelinkRemoved(new Set());
-      try { sessionStorage.setItem("kbbq_relink_cache", JSON.stringify({ result: data, timestamp, removed: [] })); } catch { /* ignore */ }
-      if (!dryRun) onUpdated?.();
-    } catch (e) { setRelinkError(String(e)); }
-    setRelinking(false);
-  }
-
-  // Delete a restaurant straight from the re-link list (for imports that don't exist on Yelp).
-  async function deleteRelinkRow(id: string, name: string) {
-    if (!confirm(`Delete "${name}"? It will be removed from the list.`)) return;
-    setRelinkBusy(id);
-    try {
-      const res = await fetch(`/api/restaurants/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        setRelinkRemoved((prev) => {
-          const next = new Set(prev).add(id);
-          try {
-            const raw = sessionStorage.getItem("kbbq_relink_cache");
-            if (raw) { const c = JSON.parse(raw); c.removed = [...next]; sessionStorage.setItem("kbbq_relink_cache", JSON.stringify(c)); }
-          } catch { /* ignore */ }
-          return next;
-        });
-        onUpdated?.();
-      }
-    } catch { /* ignore */ }
-    setRelinkBusy(null);
-  }
-
   async function runClosureCheck() {
     setClosureRunning(true);
     setClosureError("");
@@ -300,155 +226,6 @@ export default function ManageSyncTools({ token, restaurants, onUpdated, onEditR
 
   return (
     <div className="space-y-6">
-
-      {/* ── Section 0: Re-link from Yelp ─────────────────────────────── */}
-      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h3 className="text-sm font-semibold">Re-link from Yelp</h3>
-            <p className="text-xs text-muted-foreground mt-0.5 max-w-xl">
-              Searches Yelp by name for every restaurant and fixes stale/guessed Yelp links (the cause of broken
-              restaurant links and reviews not updating). Run a preview first, then apply.
-            </p>
-            {relinkLastScanned && (
-              <p className="text-xs text-muted-foreground/60 flex items-center gap-1 mt-1">
-                <Clock className="w-3 h-3" />
-                Last scanned {new Date(relinkLastScanned).toLocaleString()} · cached
-              </p>
-            )}
-          </div>
-          <div className="flex gap-2 shrink-0">
-            <button onClick={() => runRelink(true)} disabled={relinking}
-              className="flex items-center gap-2 px-3 py-1.5 border border-border text-sm font-medium rounded-lg hover:bg-foreground/5 disabled:opacity-50 transition-colors">
-              <RefreshCw className={`w-4 h-4 ${relinking && relinkDryRun ? "animate-spin" : ""}`} />
-              {relinking && relinkDryRun ? "Scanning…" : relinkResult ? "Re-scan" : "Preview"}
-            </button>
-            {relinkResult?.dryRun && relinkResult?.summary?.confident > 0 && (
-              <button onClick={() => runRelink(false)} disabled={relinking}
-                className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors">
-                <CheckCircle className="w-4 h-4" />
-                {relinking && !relinkDryRun ? "Applying…" : `Apply ${relinkResult.summary.confident}`}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {relinkError && <ErrorBox msg={relinkError} />}
-        {relinking && <LoadingSpinner label="Searching Yelp for each restaurant… ~15–30s" />}
-
-        {relinkResult && !relinking && (
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-2 text-xs">
-              <span className="px-2.5 py-1 rounded-lg border border-green-500/20 bg-green-500/10 text-green-600 dark:text-green-400 font-medium">
-                {relinkResult.summary.confident} confident {relinkResult.dryRun ? "to fix" : "fixed"}
-              </span>
-              {relinkResult.summary.weak > 0 && (
-                <span className="px-2.5 py-1 rounded-lg border border-yellow-500/20 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
-                  {relinkResult.summary.weak} low-confidence (skipped)
-                </span>
-              )}
-              {relinkResult.summary.same > 0 && (
-                <span className="px-2.5 py-1 rounded-lg border border-border bg-secondary text-muted-foreground">
-                  {relinkResult.summary.same} already correct
-                </span>
-              )}
-              {relinkResult.summary.noMatch > 0 && (
-                <span className="px-2.5 py-1 rounded-lg border border-border bg-secondary text-muted-foreground">
-                  {relinkResult.summary.noMatch} no match
-                </span>
-              )}
-            </div>
-            {relinkResult.dryRun && (
-              <p className="text-xs text-muted-foreground">
-                Preview only — nothing changed. Click <span className="font-medium">Apply</span> to write the confident fixes. Review the ⚠️ / ❌ below by hand.
-              </p>
-            )}
-            {!relinkResult.dryRun && (
-              <div className="flex items-center gap-2 text-sm text-green-500 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
-                <CheckCircle className="w-4 h-4 shrink-0" />
-                Re-linked {relinkResult.summary.applied} restaurants. Re-run the closure/sync checks to see corrected data.
-              </div>
-            )}
-
-            {/* Needs-attention: low-confidence + no-match (always surfaced so you know to check) */}
-            {(() => {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const rows: any[] = relinkResult.results ?? [];
-              // A row drops off only when it's been DELETED, or its Yelp link has CHANGED
-              // since the scan (i.e. you re-linked it). A pre-existing stale link does NOT
-              // count as "handled" — otherwise no-match rows would never show up to process.
-              const currentLink = new Map(restaurants.map((x) => [x.id, getYelpId(x)]));
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const gone = (row: any) => {
-                if (relinkRemoved.has(row.id)) return true;
-                const now = currentLink.get(row.id) ?? null;
-                // Compare against the SAME basis the scan recorded (yelp_id-or-slug).
-                // Falls back to cur_slug for results cached before cur_id existed.
-                const baseline = (row.cur_id !== undefined ? row.cur_id : row.cur_slug) ?? null;
-                return now !== baseline; // link changed since the scan (you re-linked it)
-              };
-              const weak = rows.filter((r) => r.status === "weak" && !gone(r));
-              const noMatch = rows.filter((r) => r.status === "no_match" && !gone(r));
-              const confident = rows.filter((r) => r.status === "confident");
-              if (!weak.length && !noMatch.length && !confident.length) return null;
-              return (
-                <div className="space-y-3 pt-1">
-                  {(weak.length > 0 || noMatch.length > 0) && (
-                    <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-3 space-y-2">
-                      <p className="text-xs font-semibold text-yellow-600 dark:text-yellow-400">
-                        {weak.length + noMatch.length} need a manual check — link the right one, or delete if it&apos;s not on Yelp
-                      </p>
-                      {[...weak, ...noMatch].map((r) => (
-                        <div key={r.id} className="flex items-center gap-2 text-xs">
-                          <span className="shrink-0">{r.status === "weak" ? "⚠️" : "❌"}</span>
-                          <span className="font-medium truncate">{r.name}</span>
-                          {r.status === "weak" && r.match_name && (
-                            <span className="text-muted-foreground truncate">
-                              best guess: {r.match_name} ({r.score})
-                            </span>
-                          )}
-                          {r.status === "no_match" && <span className="text-muted-foreground">no Yelp match</span>}
-                          <div className="ml-auto flex items-center gap-1.5 shrink-0">
-                            {onEditRestaurant && (
-                              <button onClick={() => onEditRestaurant(r.id)}
-                                className="px-2 py-0.5 border border-border rounded-md text-primary hover:bg-primary/10 transition-colors">
-                                Link manually
-                              </button>
-                            )}
-                            <button onClick={() => deleteRelinkRow(r.id, r.name)} disabled={relinkBusy === r.id}
-                              className="px-2 py-0.5 border border-red-500/20 rounded-md text-red-400 hover:bg-red-500/10 disabled:opacity-50 transition-colors">
-                              {relinkBusy === r.id ? "…" : "Delete"}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {confident.length > 0 && (
-                    <details className="rounded-lg border border-border overflow-hidden">
-                      <summary className="cursor-pointer list-none select-none px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-foreground/[0.03]">
-                        {confident.length} confident {relinkResult.dryRun ? "fixes (preview)" : "fixed"}
-                      </summary>
-                      <div className="border-t border-border divide-y divide-border/40">
-                        {confident.map((r) => (
-                          <div key={r.id} className="flex items-center gap-2 px-3 py-1.5 text-xs">
-                            <span className="font-medium truncate max-w-[40%]">{r.name}</span>
-                            <span className="text-muted-foreground/50 line-through truncate">{r.cur_slug ?? "—"}</span>
-                            <ArrowRight className="w-3 h-3 text-primary shrink-0" />
-                            <span className="text-primary truncate">{r.new_slug}</span>
-                            {r.is_closed && <span className="text-red-400 shrink-0">[closed]</span>}
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-        )}
-      </div>
 
       {/* ── Section 1: Closure check ─────────────────────────────────── */}
       <div className="rounded-xl border border-border p-4 space-y-3">
