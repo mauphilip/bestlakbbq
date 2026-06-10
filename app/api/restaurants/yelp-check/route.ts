@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminToken } from "@/lib/auth";
 import { getAllRestaurants } from "@/lib/getRestaurants";
-import { getYelpId } from "@/lib/yelp-shared";
+import { getYelpId, slugFromUrl } from "@/lib/yelp-shared";
 import { yelpFetch } from "@/lib/yelp-server";
 import type { Restaurant } from "@/lib/types";
 import type { RestaurantDiff } from "@/lib/yelp-types";
@@ -39,8 +39,15 @@ async function checkAll(restaurants: Restaurant[], mode: CheckMode): Promise<Res
       continue;
     }
 
-    const biz = await fetchYelpBiz(yid);
+    // Fetch by the stored id; if that's dead (e.g. a stale yelp_id left behind
+    // after the URL was changed), fall back to the slug from the Yelp URL.
+    const urlSlug = slugFromUrl(r.yelp_url);
+    let biz = await fetchYelpBiz(yid);
     await delay(100);
+    if (!biz && urlSlug && urlSlug !== yid) {
+      biz = await fetchYelpBiz(urlSlug);
+      await delay(100);
+    }
 
     if (!biz) {
       results.push({
@@ -51,6 +58,9 @@ async function checkAll(restaurants: Restaurant[], mode: CheckMode): Promise<Res
       });
       continue;
     }
+
+    // The real business id Yelp resolved to (fixes a stale stored yelp_id on apply).
+    const resolvedId = (biz.id as string) ?? yid;
 
     const isClosed = !!(biz.is_closed);
     const yelpRating = (biz.rating as number) ?? null;
@@ -76,7 +86,7 @@ async function checkAll(restaurants: Restaurant[], mode: CheckMode): Promise<Res
         changes.push({ field: "is_closed", label: "Status", old: "Open", new: "Permanently Closed" });
         results.push({
           id: r.id ?? "", name: r.name ?? "", neighborhood: r.neighborhood ?? "",
-          yelp_id: yid, yelp_url: r.yelp_url ?? "",
+          yelp_id: resolvedId, yelp_url: r.yelp_url ?? "",
           current, yelp: yelpSnap, changes, now_closed: true,
         });
       }
@@ -95,9 +105,13 @@ async function checkAll(restaurants: Restaurant[], mode: CheckMode): Promise<Res
       if (yelpUrl && r.yelp_url && yelpUrl !== r.yelp_url.split("?")[0]) {
         changes.push({ field: "yelp_url", label: "Yelp URL", old: r.yelp_url, new: yelpUrl });
       }
+      // Stored yelp_id is stale (pointed at a different business than the URL) — surface it so applying fixes it.
+      if (r.yelp_id && r.yelp_id !== resolvedId) {
+        changes.push({ field: "yelp_id", label: "Yelp link", old: r.yelp_id, new: resolvedId });
+      }
       results.push({
         id: r.id ?? "", name: r.name ?? "", neighborhood: r.neighborhood ?? "",
-        yelp_id: yid, yelp_url: r.yelp_url ?? "",
+        yelp_id: resolvedId, yelp_url: r.yelp_url ?? "",
         current, yelp: yelpSnap, changes, now_closed: false,
       });
     }

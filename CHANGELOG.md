@@ -16,6 +16,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 - **The bulk "Re-link from Yelp" tool** (and its API route). It was one-time scaffolding to link the imported data; once restaurants are linked it started re-proposing bad changes against manual fixes (and cached stale results). Link/fix individual restaurants via the edit form's **Find on Yelp**; use **Sync Updates** + **Check Closed** as the steady state.
 
 ### Fixed
+- **Sync no longer fails on a stale `yelp_id`.** If a restaurant's stored Yelp id is dead (e.g. the URL was changed but the old id stuck), the sync now falls back to the URL slug, so it fetches real data instead of "Yelp returned no data" — and surfaces a one-click "fix stale ID" so applying updates rewrites the id to the correct business. The edit form also clears a stale id when you change the Yelp URL, preventing the mismatch.
 - Closure check: clarified the "couldn't be checked" warning (was mislabeled as a closure and pointed the wrong way) — it now explains the Yelp link is stale/missing and to run **Re-link from Yelp** first, then re-check.
 - **Re-link no-match / low-confidence rows now actually show up to process.** They were being wrongly hidden because a restaurant with a *stale* Yelp URL counted as "linked"; rows now only drop off once their link genuinely changes (you re-linked it) or they're deleted.
 - **Re-link now covers admin-added (KV-only) restaurants**, not just the base JSON list — so restaurants you added that have no Yelp ID finally appear (matches what Sync Data reports).
