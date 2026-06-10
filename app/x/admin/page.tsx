@@ -217,7 +217,14 @@ export default function AdminPage() {
 
           {/* ── Yelp Sync subtab ── */}
           {manageTab === "sync" && (
-            <ManageSyncTools token={token} onUpdated={loadRestaurants} />
+            <ManageSyncTools
+              token={token}
+              onUpdated={loadRestaurants}
+              onEditRestaurant={(id) => {
+                const r = restaurants.find((x) => x.id === id);
+                if (r) setEditTarget(r);
+              }}
+            />
           )}
 
           {/* ── Restaurants subtab ── */}

@@ -6,7 +6,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 ## [Unreleased]
 
 ### Changed
-- **Unified "Sync from Yelp"** — the separate "Check Closed" and "Sync Updates" tools are now one pass. It surfaces data updates to apply (bulk, multi-select), Yelp-confirmed closures to remove (per-row Delete, **never auto-selected**), and broken links to fix — with the safety rule that **only Yelp-confirmed-closed rows are deletable** (a broken/stale link is flagged "fix the link," not offered for deletion). Also fixes stale cached counts lingering between the two old tools.
+- **Unified "Sync from Yelp"** — the separate "Check Closed" and "Sync Updates" tools are now one pass. It surfaces data updates to apply (bulk, multi-select), Yelp-confirmed closures to remove (per-row Delete, **never auto-selected**), and broken links to fix. Also fixes stale cached counts lingering between the two old tools.
+- **Sync rows are now actionable in place** — every row (updates / closed / broken-link) has an **Edit** button that opens the restaurant to relink via Find on Yelp, and broken-link rows have a per-row **Delete** (manual + confirm) so you can remove one that's truly gone without leaving the tool. Bulk/auto deletion is still limited to Yelp-confirmed closures.
 
 ### Added
 - **Delete button on the restaurant edit form** — soft-deletes base-JSON restaurants, hard-deletes admin-added ones (you no longer have to delete only from the list row).
