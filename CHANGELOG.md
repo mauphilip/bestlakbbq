@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.3.0] — 2026-06-09
+
 ### Added
 - Optional **Website** field on restaurants — set it in the admin form; shown as a 🌐 link in the directory list, the chart's "Premium / not on chart" panel, and the edit form. (Yelp's API doesn't expose a business's own site, so it's entered manually.)
 
@@ -13,6 +17,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 - Re-link "needs a manual check" rows now **drop off automatically once linked or deleted** — no rescan required.
 - Removed the up/down spinner arrows from the AYCE tier / non-AYCE price inputs.
 - **FAQ** now spells out the per-person cost calculation (AYCE tier average, non-AYCE estimate, tier-midpoint fallback) and the `$ / $$ / $$$ / $$$$` → dollar-range mapping.
+- **Dev workflow documented** (`CONTRIBUTING.md` / `AGENTS.md`): branch-per-feature, merge-to-`main`-deploys-to-production, tag releases only on explicit request.
 
 ## [0.2.0] — 2026-06-09
 
