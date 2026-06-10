@@ -6,6 +6,7 @@ import { yelpSearch } from "@/lib/yelp-server";
 import baseRestaurants from "@/data/restaurants.json";
 import type { Restaurant } from "@/lib/types";
 import type { DiscoverCandidate, DiscoverCache } from "@/lib/yelp-types";
+import { DEFAULT_ZIP_MAP, getZipMap } from "@/lib/neighborhoods";
 
 const CACHE_KEY = "kbbq_discover_cache";
 
@@ -29,38 +30,8 @@ function buildKnownSet(restaurants: Restaurant[]) {
 
 // Zip codes let us distinguish Koreatown / Mid-Wilshire / etc. inside "Los Angeles"
 // and map OC cities to the right neighborhood label for filters.
-const ZIP_TO_NEIGHBORHOOD: Record<string, string> = {
-  // Koreatown (90004–90006, 90010, 90019–90020)
-  "90004": "Koreatown", "90005": "Koreatown", "90006": "Koreatown",
-  "90010": "Koreatown", "90019": "Koreatown", "90020": "Koreatown",
-  // Mid-Wilshire
-  "90036": "Mid-Wilshire",
-  // Gardena
-  "90247": "Gardena", "90248": "Gardena", "90249": "Gardena",
-  // Torrance
-  "90501": "Torrance", "90502": "Torrance", "90503": "Torrance",
-  "90504": "Torrance", "90505": "Torrance", "90506": "Torrance",
-  // Van Nuys / San Fernando Valley
-  "91401": "Van Nuys", "91402": "Van Nuys", "91405": "Van Nuys",
-  "91406": "Van Nuys", "91411": "Van Nuys", "91423": "Van Nuys",
-  // Glendale
-  "91201": "Glendale", "91202": "Glendale", "91203": "Glendale",
-  "91204": "Glendale", "91205": "Glendale", "91206": "Glendale",
-  // Rowland Heights / SGV
-  "91748": "Rowland Heights", "91789": "Rowland Heights",
-  "91801": "Alhambra", "91803": "Alhambra",
-  "91754": "SGV", "91755": "SGV", "91770": "SGV",
-  // Orange County
-  "92612": "Irvine", "92614": "Irvine", "92617": "Irvine",
-  "92618": "Irvine", "92620": "Irvine", "92604": "Irvine",
-  "90620": "Buena Park", "90621": "Buena Park",
-  "92801": "Anaheim", "92802": "Anaheim", "92804": "Anaheim",
-  "90701": "Cerritos", "90703": "Cerritos",
-  "92833": "Fullerton", "92835": "Fullerton",
-  "92868": "Orange County", "92865": "Orange County",
-};
 
-function cityToNeighborhood(city: string, zip?: string, zipMap: Record<string, string> = ZIP_TO_NEIGHBORHOOD): string {
+function cityToNeighborhood(city: string, zip?: string, zipMap: Record<string, string> = DEFAULT_ZIP_MAP): string {
   // Zip takes priority — it disambiguates "Los Angeles" into Koreatown, etc.
   if (zip && zipMap[zip]) return zipMap[zip];
   const map: Record<string, string> = {
@@ -93,7 +64,7 @@ const LOCATIONS = [
   "Buena Park, CA",
 ];
 
-async function runDiscovery(known: ReturnType<typeof buildKnownSet>, zipMap: Record<string, string> = ZIP_TO_NEIGHBORHOOD, locations: string[] = LOCATIONS) {
+async function runDiscovery(known: ReturnType<typeof buildKnownSet>, zipMap: Record<string, string> = DEFAULT_ZIP_MAP, locations: string[] = LOCATIONS) {
   const seen = new Set<string>();
   const candidates: DiscoverCandidate[] = [];
   const errors: string[] = [];
@@ -124,7 +95,7 @@ async function runDiscovery(known: ReturnType<typeof buildKnownSet>, zipMap: Rec
   return { candidates, totalScanned: seen.size, errors };
 }
 
-function bizToCandidate(biz: YelpBizLite, known: ReturnType<typeof buildKnownSet>, zipMap: Record<string, string> = ZIP_TO_NEIGHBORHOOD): DiscoverCandidate {
+function bizToCandidate(biz: YelpBizLite, known: ReturnType<typeof buildKnownSet>, zipMap: Record<string, string> = DEFAULT_ZIP_MAP): DiscoverCandidate {
   const slug = slugFromUrl(biz.url) ?? "";
   const alreadyTracked =
     (biz.id ? known.ids.has(biz.id) : false) ||
@@ -176,12 +147,8 @@ export async function GET(req: NextRequest) {
     } catch { /* KV unavailable */ }
     const known = buildKnownSet([...base, ...kv]);
 
-    // Load KV neighborhood overrides (non-fatal)
-    let zipMap: Record<string, string> = { ...ZIP_TO_NEIGHBORHOOD };
-    try {
-      const overrides = await redis.get<Record<string, string>>("kbbq_neighborhood_overrides");
-      if (overrides) zipMap = { ...ZIP_TO_NEIGHBORHOOD, ...overrides };
-    } catch { /* non-fatal */ }
+    // Load the editable zip→neighborhood map (saved KV map or seed; non-fatal)
+    const zipMap = await getZipMap();
 
     // Load KV cache (non-fatal)
     let cache: DiscoverCache | null = null;
