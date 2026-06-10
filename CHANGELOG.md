@@ -5,7 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+- Closure check: clarified the "couldn't be checked" warning (was mislabeled as a closure and pointed the wrong way) — it now explains the Yelp link is stale/missing and to run **Re-link from Yelp** first, then re-check.
 
 ## [0.3.0] — 2026-06-09
 
