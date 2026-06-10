@@ -399,7 +399,7 @@ export default function RestaurantForm({ initial, token, onClose, onSaved, onDel
           <div>
             <label className="text-sm font-medium block mb-1.5">Yelp URL</label>
             <div className="flex gap-2">
-              <input value={yelpUrl} onChange={(e) => setYelpUrl(e.target.value)}
+              <input value={yelpUrl} onChange={(e) => { setYelpUrl(e.target.value); if (yelpId) setYelpId(""); }}
                 placeholder="https://www.yelp.com/biz/..."
                 className="flex-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
               {yelpMenuUrl && (

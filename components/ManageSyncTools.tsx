@@ -284,6 +284,7 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
                   const reviewChange = diff.changes.find((c) => c.field === "review_count");
                   const tierChange = diff.changes.find((c) => c.field === "price_tier");
                   const urlChange = diff.changes.find((c) => c.field === "yelp_url");
+                  const linkChange = diff.changes.find((c) => c.field === "yelp_id");
                   return (
                     <div key={diff.id} className={`rounded-xl border px-4 py-3 transition-colors ${
                       isApplied ? "border-green-500/20 bg-green-500/5 opacity-70" : isSel ? "border-primary/30 bg-primary/5" : "border-yellow-500/20 bg-yellow-500/5"
@@ -317,6 +318,7 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
                         {reviewChange && <li className="flex items-center gap-2 text-sm"><span className="text-muted-foreground w-20 shrink-0">Reviews</span><DiffValue cur={reviewChange.old as number} next={reviewChange.new as number} fmt={(v) => Number(v).toLocaleString()} /></li>}
                         {tierChange && <li className="flex items-center gap-2 text-sm"><span className="text-muted-foreground w-20 shrink-0">Price tier</span><DiffValue cur={tierChange.old as string} next={tierChange.new as string} /></li>}
                         {urlChange && <li className="flex items-center gap-2 text-sm"><span className="text-muted-foreground w-20 shrink-0">Yelp URL</span><span className="text-xs text-muted-foreground truncate max-w-xs">{urlChange.new as string}</span></li>}
+                        {linkChange && <li className="flex items-center gap-2 text-sm"><span className="text-muted-foreground w-20 shrink-0">Yelp link</span><span className="text-xs text-primary">fix stale ID → correct listing</span></li>}
                       </ul>
                     </div>
                   );
