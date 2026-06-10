@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminToken } from "@/lib/auth";
-import { getKVRestaurants, redis, KV_RESTAURANT_PREFIX } from "@/lib/kv";
+import { redis, KV_RESTAURANT_PREFIX } from "@/lib/kv";
+import { getAllRestaurants } from "@/lib/getRestaurants";
 import { slugFromUrl, KBBQ_CATEGORY, type YelpBizLite } from "@/lib/yelp-shared";
 import { yelpSearch, hasYelpKey } from "@/lib/yelp-server";
-import baseRestaurants from "@/data/restaurants.json";
 import type { Restaurant } from "@/lib/types";
 
 // Re-link restaurants to their REAL Yelp business by searching Yelp by name.
@@ -36,12 +36,10 @@ export async function POST(req: NextRequest) {
   const ids: string[] | undefined = body.ids;
 
   // Canonical set = base JSON merged with KV overrides (KV wins), minus deletes
-  let kv: Restaurant[] = [];
-  try { kv = (await getKVRestaurants()) as unknown as Restaurant[]; } catch { /* ignore */ }
-  const kvMap = new Map(kv.map((r) => [r.id, r]));
-  let list = (baseRestaurants as Restaurant[])
-    .map((b) => ({ ...b, ...(kvMap.get(b.id) ?? {}) }))
-    .filter((r) => !(r as Restaurant & { is_deleted?: boolean }).is_deleted);
+  // Same merged set the sync/closure checks use: base + KV overrides + KV-only
+  // additions, minus soft-deleted. (Previously this only looped base JSON, so
+  // admin-added restaurants with no Yelp ID never appeared here.)
+  let list: Restaurant[] = await getAllRestaurants();
   if (ids?.length) list = list.filter((r) => ids.includes(r.id));
 
   const results: Array<Record<string, unknown>> = [];
