@@ -45,6 +45,9 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [relinkResult, setRelinkResult] = useState<any | null>(null);
   const [relinkDryRun, setRelinkDryRun] = useState(true);
+  const [relinkLastScanned, setRelinkLastScanned] = useState<string | null>(null);
+  const [relinkRemoved, setRelinkRemoved] = useState<Set<string>>(new Set()); // rows linked/deleted this session
+  const [relinkBusy, setRelinkBusy] = useState<string | null>(null); // id being deleted
 
   // ── Closure check ────────────────────────────────────────────────────────────
   const [closureRunning, setClosureRunning] = useState(false);
@@ -66,8 +69,20 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
   const [syncStats, setSyncStats] = useState<{ changedCount: number; upToDateCount: number; errorCount: number } | null>(null);
   const [syncLastChecked, setSyncLastChecked] = useState<string | null>(null);
 
-  // Restore cached sync/closure results
+  // Restore cached sync/closure/relink results
   useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("kbbq_relink_cache");
+      if (raw) {
+        const cached = JSON.parse(raw);
+        if (cached?.result) {
+          setRelinkResult(cached.result);
+          setRelinkDryRun(cached.result.dryRun ?? true);
+          setRelinkLastScanned(cached.timestamp ?? null);
+          setRelinkRemoved(new Set<string>(cached.removed ?? []));
+        }
+      }
+    } catch { /* ignore */ }
     try {
       const raw = sessionStorage.getItem("kbbq_closure_cache");
       if (raw) {
@@ -75,6 +90,7 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
         if (cached?.results) {
           setClosureResults(cached.results);
           setClosureLastChecked(cached.timestamp ?? null);
+          if (cached.deletedIds) setDeletedIds(new Set<string>(cached.deletedIds));
         }
       }
     } catch { /* ignore */ }
@@ -111,10 +127,38 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error ?? `HTTP ${res.status}`);
+      const timestamp = new Date().toISOString();
       setRelinkResult(data);
+      setRelinkLastScanned(timestamp);
+      setRelinkRemoved(new Set());
+      try { sessionStorage.setItem("kbbq_relink_cache", JSON.stringify({ result: data, timestamp, removed: [] })); } catch { /* ignore */ }
       if (!dryRun) onUpdated?.();
     } catch (e) { setRelinkError(String(e)); }
     setRelinking(false);
+  }
+
+  // Delete a restaurant straight from the re-link list (for imports that don't exist on Yelp).
+  async function deleteRelinkRow(id: string, name: string) {
+    if (!confirm(`Delete "${name}"? It will be removed from the list.`)) return;
+    setRelinkBusy(id);
+    try {
+      const res = await fetch(`/api/restaurants/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setRelinkRemoved((prev) => {
+          const next = new Set(prev).add(id);
+          try {
+            const raw = sessionStorage.getItem("kbbq_relink_cache");
+            if (raw) { const c = JSON.parse(raw); c.removed = [...next]; sessionStorage.setItem("kbbq_relink_cache", JSON.stringify(c)); }
+          } catch { /* ignore */ }
+          return next;
+        });
+        onUpdated?.();
+      }
+    } catch { /* ignore */ }
+    setRelinkBusy(null);
   }
 
   async function runClosureCheck() {
@@ -159,6 +203,14 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
         setDeletedIds((s) => new Set(s).add(id));
       } catch { /* ignore */ }
     }
+    // Persist deletions into the closure cache so they stay hidden after a reload.
+    setDeletedIds((s) => {
+      try {
+        const raw = sessionStorage.getItem("kbbq_closure_cache");
+        if (raw) { const c = JSON.parse(raw); c.deletedIds = [...s]; sessionStorage.setItem("kbbq_closure_cache", JSON.stringify(c)); }
+      } catch { /* ignore */ }
+      return s;
+    });
     setDeleting(false);
     onUpdated?.();
   }
@@ -255,12 +307,18 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
               Searches Yelp by name for every restaurant and fixes stale/guessed Yelp links (the cause of broken
               restaurant links and reviews not updating). Run a preview first, then apply.
             </p>
+            {relinkLastScanned && (
+              <p className="text-xs text-muted-foreground/60 flex items-center gap-1 mt-1">
+                <Clock className="w-3 h-3" />
+                Last scanned {new Date(relinkLastScanned).toLocaleString()} · cached
+              </p>
+            )}
           </div>
           <div className="flex gap-2 shrink-0">
             <button onClick={() => runRelink(true)} disabled={relinking}
               className="flex items-center gap-2 px-3 py-1.5 border border-border text-sm font-medium rounded-lg hover:bg-foreground/5 disabled:opacity-50 transition-colors">
               <RefreshCw className={`w-4 h-4 ${relinking && relinkDryRun ? "animate-spin" : ""}`} />
-              {relinking && relinkDryRun ? "Scanning…" : "Preview"}
+              {relinking && relinkDryRun ? "Scanning…" : relinkResult ? "Re-scan" : "Preview"}
             </button>
             {relinkResult?.dryRun && relinkResult?.summary?.confident > 0 && (
               <button onClick={() => runRelink(false)} disabled={relinking}
@@ -313,8 +371,8 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
             {(() => {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const rows: any[] = relinkResult.results ?? [];
-              const weak = rows.filter((r) => r.status === "weak");
-              const noMatch = rows.filter((r) => r.status === "no_match");
+              const weak = rows.filter((r) => r.status === "weak" && !relinkRemoved.has(r.id));
+              const noMatch = rows.filter((r) => r.status === "no_match" && !relinkRemoved.has(r.id));
               const confident = rows.filter((r) => r.status === "confident");
               if (!weak.length && !noMatch.length && !confident.length) return null;
               return (
@@ -322,7 +380,7 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
                   {(weak.length > 0 || noMatch.length > 0) && (
                     <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-3 space-y-2">
                       <p className="text-xs font-semibold text-yellow-600 dark:text-yellow-400">
-                        {weak.length + noMatch.length} need a manual check
+                        {weak.length + noMatch.length} need a manual check — link the right one, or delete if it&apos;s not on Yelp
                       </p>
                       {[...weak, ...noMatch].map((r) => (
                         <div key={r.id} className="flex items-center gap-2 text-xs">
@@ -334,12 +392,18 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
                             </span>
                           )}
                           {r.status === "no_match" && <span className="text-muted-foreground">no Yelp match</span>}
-                          {onEditRestaurant && (
-                            <button onClick={() => onEditRestaurant(r.id)}
-                              className="ml-auto shrink-0 px-2 py-0.5 border border-border rounded-md text-primary hover:bg-primary/10 transition-colors">
-                              Link manually
+                          <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                            {onEditRestaurant && (
+                              <button onClick={() => onEditRestaurant(r.id)}
+                                className="px-2 py-0.5 border border-border rounded-md text-primary hover:bg-primary/10 transition-colors">
+                                Link manually
+                              </button>
+                            )}
+                            <button onClick={() => deleteRelinkRow(r.id, r.name)} disabled={relinkBusy === r.id}
+                              className="px-2 py-0.5 border border-red-500/20 rounded-md text-red-400 hover:bg-red-500/10 disabled:opacity-50 transition-colors">
+                              {relinkBusy === r.id ? "…" : "Delete"}
                             </button>
-                          )}
+                          </div>
                         </div>
                       ))}
                     </div>

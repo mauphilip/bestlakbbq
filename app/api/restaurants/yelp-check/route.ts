@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminToken } from "@/lib/auth";
-import { getKVRestaurants } from "@/lib/kv";
+import { getAllRestaurants } from "@/lib/getRestaurants";
 import { getYelpId } from "@/lib/yelp-shared";
 import { yelpFetch } from "@/lib/yelp-server";
-import baseRestaurants from "@/data/restaurants.json";
 import type { Restaurant } from "@/lib/types";
 import type { RestaurantDiff } from "@/lib/yelp-types";
 
@@ -131,14 +130,9 @@ export async function POST(req: NextRequest) {
     const filterIds: string[] = body.ids ?? [];
     const mode: CheckMode = body.mode === "closed" ? "closed" : "updates";
 
-    // KV failure is non-fatal — fall back to base JSON only
-    const base = baseRestaurants as Restaurant[];
-    let kv: Restaurant[] = [];
-    try {
-      kv = (await getKVRestaurants()) as unknown as Restaurant[];
-    } catch { /* ignore */ }
-
-    let all = [...base, ...kv];
+    // Merged base+KV list with KV overrides winning and soft-deleted rows removed
+    // (so deleted restaurants are never re-checked/re-reported).
+    let all = await getAllRestaurants();
     if (filterIds.length) all = all.filter((r) => filterIds.includes(r.id));
 
     const results = await checkAll(all, mode);
