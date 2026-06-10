@@ -11,7 +11,7 @@ const faqs: { q: string; a: React.ReactNode }[] = [
     a: (
       <div className="space-y-2 text-sm text-muted-foreground">
         <p>
-          <strong className="text-foreground">AYCE spots:</strong> The most expensive dinner buffet tier price is shown. Many spots have 2–3 tiers (e.g. Standard $29, Premium $39) — the chart uses the highest dinner price per the original methodology.
+          <strong className="text-foreground">AYCE spots:</strong> The chart plots the <em>average</em> of the menu tiers. Many spots have 2–4 tiers (e.g. Standard $29, Premium $39) — hover a bubble to see the full price range.
         </p>
         <p>
           <strong className="text-foreground">Non-AYCE spots:</strong> Estimated cost per person based on the most expensive combo or sharing platter divided by a recommended group size (e.g. a $120 combo for 3 people = $40/pp). This is an estimate and may vary.

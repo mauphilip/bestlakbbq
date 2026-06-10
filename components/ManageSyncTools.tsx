@@ -5,11 +5,14 @@ import {
   RefreshCw, CheckCircle, ExternalLink,
   Clock, ShieldAlert, ArrowRight,
 } from "lucide-react";
+import { isYelpConnected } from "@/lib/yelp-shared";
 import type { Restaurant } from "@/lib/types";
 import type { RestaurantDiff } from "@/lib/yelp-types";
 
 interface Props {
   token: string;
+  /** Live restaurant list — used to drop now-linked rows off the re-link list without rescanning. */
+  restaurants: Restaurant[];
   onUpdated?: () => void;
   /** Open the edit form for a restaurant (used by "Link manually" on re-link stragglers). */
   onEditRestaurant?: (id: string) => void;
@@ -38,7 +41,7 @@ function DiffValue({
   );
 }
 
-export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: Props) {
+export default function ManageSyncTools({ token, restaurants, onUpdated, onEditRestaurant }: Props) {
   // ── Re-link from Yelp ──────────────────────────────────────────────────────────
   const [relinking, setRelinking] = useState(false);
   const [relinkError, setRelinkError] = useState("");
@@ -371,8 +374,11 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
             {(() => {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const rows: any[] = relinkResult.results ?? [];
-              const weak = rows.filter((r) => r.status === "weak" && !relinkRemoved.has(r.id));
-              const noMatch = rows.filter((r) => r.status === "no_match" && !relinkRemoved.has(r.id));
+              // Linked-since-scan (e.g. via "Link manually") and deleted rows drop off — no rescan needed.
+              const linkedIds = new Set(restaurants.filter((x) => isYelpConnected(x)).map((x) => x.id));
+              const gone = (id: string) => relinkRemoved.has(id) || linkedIds.has(id);
+              const weak = rows.filter((r) => r.status === "weak" && !gone(r.id));
+              const noMatch = rows.filter((r) => r.status === "no_match" && !gone(r.id));
               const confident = rows.filter((r) => r.status === "confident");
               if (!weak.length && !noMatch.length && !confident.length) return null;
               return (

@@ -29,6 +29,13 @@ const NEIGHBORHOODS = [
   "Gardena", "Glendale", "Torrance", "Rowland Heights", "Van Nuys",
 ];
 
+/** AYCE cost shown on the chart = average of the tiers (rounded). */
+function ayceAvgCost(r: Restaurant): number {
+  const tiers = r.ayce_tiers ?? [];
+  if (!tiers.length) return r.non_ayce_est_per_person ?? 0;
+  return Math.round(tiers.reduce((s, t) => s + t.price, 0) / tiers.length);
+}
+
 /** Cost → color matching original Tableau gradient */
 function costColor(cost: number): string {
   if (cost < 35) return "#f59e0b";       // gold  (budget)
@@ -70,6 +77,12 @@ function CustomTooltip({ active, payload }: TooltipProps) {
             ${minPrice}{maxPrice && maxPrice !== minPrice ? `–$${maxPrice}` : ""}/pp
           </span>
         </div>
+        {r.ayce && maxPrice !== null && maxPrice !== minPrice && (
+          <div className="flex justify-between gap-4">
+            <span className="text-muted-foreground">Plotted at</span>
+            <span className="text-muted-foreground">avg ${ayceAvgCost(r)}/pp</span>
+          </div>
+        )}
         <div className="flex justify-between gap-4">
           <span className="text-muted-foreground">Yelp</span>
           <span className="font-medium">⭐ {r.yelp_rating}</span>
@@ -281,7 +294,7 @@ export default function KBBQChart({ restaurants }: Props) {
     const q = search.trim().toLowerCase();
     return filtered.map((r) => {
       const cost = r.ayce
-        ? Math.min(...r.ayce_tiers.map((t) => t.price))
+        ? ayceAvgCost(r)
         : (r.non_ayce_est_per_person ?? 0);
       const rating = r.yelp_rating;
       // sqrt scaling so review-count disparity doesn't dominate bubble size
