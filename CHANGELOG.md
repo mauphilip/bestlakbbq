@@ -12,6 +12,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 - **Multi-tier AYCE restaurants now plot at the _average_ of their tiers** (was the cheapest tier); the tooltip shows the full range and the plotted average. Updated the homepage/FAQ copy to match.
 - Re-link "needs a manual check" rows now **drop off automatically once linked or deleted** — no rescan required.
 - Removed the up/down spinner arrows from the AYCE tier / non-AYCE price inputs.
+- **FAQ** now spells out the per-person cost calculation (AYCE tier average, non-AYCE estimate, tier-midpoint fallback) and the `$ / $$ / $$$ / $$$$` → dollar-range mapping.
 
 ## [0.2.0] — 2026-06-09
 

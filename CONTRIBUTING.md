@@ -58,20 +58,22 @@ PRs are **optional** — pick what fits the work:
 
 ## Releases & tags
 
-After a meaningful body of work (one or several features), cut a release:
+**Do not tag automatically.** Merged work simply accumulates under `[Unreleased]` in `CHANGELOG.md`. Cut a release **only when the maintainer explicitly asks for one** ("create a release tag", "cut v0.3.0", etc.).
 
-1. **Update `CHANGELOG.md`** — move items from `[Unreleased]` into a new version section dated today.
-2. **Tag it** (annotated, [semver](https://semver.org/)):
+When asked, aggregate everything merged since the last tag into one release:
+
+1. **Roll up `[Unreleased]`** — combine the notes from all branches merged since the previous tag into a single new version section dated today (`Added / Changed / Fixed / Removed`). Reset `[Unreleased]` to empty.
+2. **Tag it** (annotated, [semver](https://semver.org/)), with the rolled-up notes in the tag message:
    ```bash
-   git tag -a v0.2.0 -m "v0.2.0 — <headline>"
-   git push origin v0.2.0
+   git tag -a v0.3.0 -m "$(cat release-notes.md)"
+   git push origin v0.3.0
    ```
-3. **(Optional) publish GitHub release notes:**
+3. **Publish the GitHub release** with the same aggregated notes:
    ```bash
-   gh release create v0.2.0 --notes-file <notes.md>   # or --generate-notes
+   gh release create v0.3.0 --notes-file release-notes.md
    ```
 
-Production is already live from the `main` merge — the tag/release is the human-readable marker of *what shipped*.
+Production is already live from each `main` merge — the tag/release is just the human-readable marker of *what shipped in this batch*.
 
 ### Release-notes format
 High-level and user-facing (not commit-by-commit). Group as:
@@ -84,6 +86,10 @@ High-level and user-facing (not commit-by-commit). Group as:
 ```
 
 ---
+
+## Data maintenance
+
+- **Price-tier ranges** (`KBBQ_PRICE_RANGES` in `lib/types.ts`) are calibrated estimates used when an exact price isn't verified. **Once enough restaurants have manually-verified prices**, recompute the `$ / $$ / $$$ / $$$$` ranges from the real distribution (e.g. quartiles of verified `non_ayce_est_per_person` / AYCE tier averages) and update the constant + the FAQ. _(Pending — not enough verified entries yet.)_
 
 ## Project notes / gotchas
 
