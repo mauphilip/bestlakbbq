@@ -72,14 +72,17 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
   }
 
   // ── Categorize (one pass) ──────────────────────────────────────────────────
-  const live = (diffs ?? []).filter((d) => !deletedIds.has(d.id));
+  // Applied (and deleted) rows drop off so the list/counts reflect only what's
+  // still pending — and stay dropped after a reload (appliedIds is cached).
+  const live = (diffs ?? []).filter((d) => !deletedIds.has(d.id) && !appliedIds.has(d.id));
   const unreachable = live.filter((d) => !!d.error);                                   // no Yelp ID / no data → fix the link
   const closed = live.filter((d) => !d.error && d.yelp?.is_closed);                    // Yelp-confirmed closed → deletable
   const changed = live.filter((d) => !d.error && !d.yelp?.is_closed && d.changes.length > 0);
   const upToDate = live.filter((d) => !d.error && !d.yelp?.is_closed && d.changes.length === 0);
 
-  const selectableChanged = changed.filter((d) => !appliedIds.has(d.id));
-  const selectedNotApplied = selectableChanged.filter((d) => selected.has(d.id)).length;
+  const selectableChanged = changed; // already excludes applied
+  const selectedNotApplied = changed.filter((d) => selected.has(d.id)).length;
+  const appliedCount = appliedIds.size;
 
   async function runSync() {
     setSyncing(true);
@@ -194,6 +197,7 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
             {closed.length > 0 && <span className="px-2.5 py-1 bg-red-500/10 text-red-500 rounded-lg border border-red-500/20 font-medium">{closed.length} closed on Yelp</span>}
             {unreachable.length > 0 && <span className="px-2.5 py-1 bg-secondary text-muted-foreground rounded-lg border border-border">{unreachable.length} need a link fix</span>}
             {upToDate.length > 0 && <span className="px-2.5 py-1 bg-green-500/10 text-green-600 dark:text-green-400 rounded-lg border border-green-500/20">{upToDate.length} up to date</span>}
+            {appliedCount > 0 && <span className="px-2.5 py-1 bg-green-500/10 text-green-600 dark:text-green-400 rounded-lg border border-green-500/20 flex items-center gap-1"><CheckCircle className="w-3 h-3" />{appliedCount} applied</span>}
           </div>
 
           {/* ── Closed on Yelp (per-row delete, never auto-selected) ── */}
@@ -344,7 +348,10 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
           )}
 
           {changed.length === 0 && closed.length === 0 && unreachable.length === 0 && (
-            <p className="flex items-center gap-2 text-sm text-green-500"><CheckCircle className="w-4 h-4" /> Everything is linked, open, and up to date.</p>
+            <p className="flex items-center gap-2 text-sm text-green-500">
+              <CheckCircle className="w-4 h-4" />
+              {appliedCount > 0 ? `${appliedCount} update${appliedCount !== 1 ? "s" : ""} applied — everything else is up to date.` : "Everything is linked, open, and up to date."}
+            </p>
           )}
         </>
       )}
