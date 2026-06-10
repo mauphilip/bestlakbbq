@@ -8,6 +8,7 @@ import AdminSearchPanel from "@/components/AdminSearchPanel";
 import RestaurantForm from "@/components/RestaurantForm";
 import DiscoverPanel from "@/components/DiscoverPanel";
 import ManageSyncTools from "@/components/ManageSyncTools";
+import YelpConnector from "@/components/YelpConnector";
 import { isYelpConnected } from "@/lib/yelp-shared";
 
 function getStoredToken() {
@@ -25,7 +26,7 @@ export default function AdminPage() {
   const [editTarget, setEditTarget] = useState<Restaurant | null>(null);
   const [addNew, setAddNew] = useState(false);
   const [activeTab, setActiveTab] = useState<"search" | "manage" | "neighborhoods">("manage");
-  const [manageTab, setManageTab] = useState<"list" | "sync">("list");
+  const [manageTab, setManageTab] = useState<"list" | "sync" | "connector">("list");
   const [searchFilter, setSearchFilter] = useState("");
   const [priceFilter, setPriceFilter] = useState(false); // show only "needs price check"
   const [zipOverrides, setZipOverrides] = useState<Record<string, string>>({});
@@ -205,6 +206,7 @@ export default function AdminPage() {
             {([
               { key: "list", label: "Restaurants" },
               { key: "sync", label: "Yelp Sync" },
+              { key: "connector", label: "Yelp Connector" },
             ] as const).map(({ key, label }) => (
               <button key={key} onClick={() => setManageTab(key)}
                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
@@ -214,6 +216,9 @@ export default function AdminPage() {
               </button>
             ))}
           </div>
+
+          {/* ── Yelp Connector subtab ── */}
+          {manageTab === "connector" && <YelpConnector token={token} />}
 
           {/* ── Yelp Sync subtab ── */}
           {manageTab === "sync" && (
