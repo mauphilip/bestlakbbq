@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { RefreshCw, CheckCircle, ExternalLink, Clock, ShieldAlert, ArrowRight, Trash2 } from "lucide-react";
+import { RefreshCw, CheckCircle, ExternalLink, Clock, ShieldAlert, ArrowRight, Trash2, Pencil } from "lucide-react";
 import type { Restaurant } from "@/lib/types";
 import type { RestaurantDiff } from "@/lib/yelp-types";
 
 interface Props {
   token: string;
   onUpdated?: () => void;
+  /** Open the edit form for a restaurant (used by the row Edit/relink actions). */
+  onEditRestaurant?: (id: string) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -32,7 +34,7 @@ const nameOf = (d: RestaurantDiff) =>
 // One pass over Yelp: surfaces data updates to apply, Yelp-confirmed closures to
 // remove, and broken links to fix. Deletes are review-only (never auto-selected),
 // and only Yelp-confirmed-closed rows are deletable here.
-export default function ManageSyncTools({ token, onUpdated }: Props) {
+export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: Props) {
   const [syncing, setSyncing] = useState(false);
   const [diffs, setDiffs] = useState<RestaurantDiff[] | null>(null);
   const [syncError, setSyncError] = useState("");
@@ -147,8 +149,8 @@ export default function ManageSyncTools({ token, onUpdated }: Props) {
     onUpdated?.();
   }
 
-  async function deleteClosed(id: string, name: string) {
-    if (!confirm(`Delete "${name}"? It's marked closed on Yelp — this removes it from the list.`)) return;
+  async function deleteOne(id: string, name: string, note = "") {
+    if (!confirm(`Delete "${name}"?${note} This removes it from the list.`)) return;
     setDeletingId(id);
     try {
       const res = await fetch(`/api/restaurants/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
@@ -210,7 +212,13 @@ export default function ManageSyncTools({ token, onUpdated }: Props) {
                       Yelp <ExternalLink className="w-3 h-3" />
                     </a>
                   )}
-                  <button onClick={() => deleteClosed(d.id, nameOf(d))} disabled={deletingId === d.id}
+                  {onEditRestaurant && (
+                    <button onClick={() => onEditRestaurant(d.id)}
+                      className="flex items-center gap-1 px-2 py-1 border border-border text-xs rounded-md text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors shrink-0">
+                      <Pencil className="w-3 h-3" /> Edit
+                    </button>
+                  )}
+                  <button onClick={() => deleteOne(d.id, nameOf(d), " It's marked closed on Yelp.")} disabled={deletingId === d.id}
                     className="flex items-center gap-1 px-2.5 py-1 bg-red-500 text-white text-xs font-medium rounded-md hover:bg-red-600 disabled:opacity-50 transition-colors shrink-0">
                     <Trash2 className="w-3 h-3" /> {deletingId === d.id ? "Deleting…" : "Delete"}
                   </button>
@@ -219,23 +227,40 @@ export default function ManageSyncTools({ token, onUpdated }: Props) {
             </div>
           )}
 
-          {/* ── Broken links (not deletable — could be a live spot with a stale URL) ── */}
+          {/* ── Broken links — fix (relink) or delete, per row ── */}
           {unreachable.length > 0 && (
-            <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-3 space-y-1.5">
+            <div className="space-y-1.5">
               <p className="text-xs font-medium text-yellow-600 dark:text-yellow-400 flex items-center gap-1.5">
-                <ShieldAlert className="w-3.5 h-3.5" /> {unreachable.length} couldn&apos;t be checked — fix the Yelp link
+                <ShieldAlert className="w-3.5 h-3.5" /> {unreachable.length} couldn&apos;t be checked — relink or delete
               </p>
               <p className="text-xs text-muted-foreground">
-                Their Yelp link is broken or missing, so we can&apos;t tell if they&apos;re open. They are <em>not</em> offered for deletion (a broken link might just be a live spot with a stale URL). Open each in the <span className="font-medium">Restaurants</span> tab → <span className="font-medium">Find on Yelp</span> to relink (or delete it there if it really is gone).
+                Their Yelp link is broken or missing, so open/closed can&apos;t be confirmed. <span className="font-medium">Edit</span> to relink (Find on Yelp), or <span className="font-medium">Delete</span> if it&apos;s really gone. (Not auto-selected — a broken link can just be a live spot with a stale URL.)
               </p>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1">
-                {unreachable.map((d) => (
-                  <span key={d.id} className="text-xs text-muted-foreground">
-                    {nameOf(d)}
-                    {d.yelp_url && <a href={d.yelp_url} target="_blank" rel="noopener noreferrer" className="text-primary ml-1">↗</a>}
-                  </span>
-                ))}
-              </div>
+              {unreachable.map((d) => (
+                <div key={d.id} className="flex items-center gap-3 rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-3 py-2.5">
+                  <ShieldAlert className="w-4 h-4 text-yellow-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium truncate">{nameOf(d)}</span>
+                    {d.neighborhood && <span className="text-xs text-muted-foreground ml-2">{d.neighborhood}</span>}
+                    {d.error && <span className="text-xs text-muted-foreground/60 ml-2 italic">{d.error}</span>}
+                  </div>
+                  {d.yelp_url && (
+                    <a href={d.yelp_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1 shrink-0">
+                      Yelp <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                  {onEditRestaurant && (
+                    <button onClick={() => onEditRestaurant(d.id)}
+                      className="flex items-center gap-1 px-2 py-1 border border-border text-xs rounded-md text-primary hover:bg-primary/10 transition-colors shrink-0">
+                      <Pencil className="w-3 h-3" /> Edit
+                    </button>
+                  )}
+                  <button onClick={() => deleteOne(d.id, nameOf(d), " We couldn't verify it on Yelp.")} disabled={deletingId === d.id}
+                    className="flex items-center gap-1 px-2.5 py-1 border border-red-500/30 text-red-400 text-xs font-medium rounded-md hover:bg-red-500/10 disabled:opacity-50 transition-colors shrink-0">
+                    <Trash2 className="w-3 h-3" /> {deletingId === d.id ? "Deleting…" : "Delete"}
+                  </button>
+                </div>
+              ))}
             </div>
           )}
 
@@ -279,6 +304,12 @@ export default function ManageSyncTools({ token, onUpdated }: Props) {
                           <a href={diff.yelp_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1 shrink-0">
                             Yelp <ExternalLink className="w-3 h-3" />
                           </a>
+                        )}
+                        {onEditRestaurant && (
+                          <button onClick={() => onEditRestaurant(diff.id)} title="Edit"
+                            className="text-muted-foreground hover:text-foreground shrink-0">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
                         )}
                       </div>
                       <ul className="mt-2 ml-7 space-y-1">
