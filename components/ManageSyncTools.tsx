@@ -524,8 +524,8 @@ export default function ManageSyncTools({ token, restaurants, onUpdated, onEditR
                   <div className="flex items-start gap-2 text-xs text-yellow-600 dark:text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2">
                     <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
                     <span>
-                      {unreachable.length} couldn&apos;t be verified on Yelp — usually a stale/incorrect Yelp link, not a closure.
-                      Run <span className="font-medium">Re-link from Yelp</span> (below), then re-check.
+                      <span className="font-medium">{unreachable.length} couldn&apos;t be checked on Yelp</span> — their Yelp link is stale or missing, so we can&apos;t tell if they&apos;re open or closed (this is <em>not</em> a closure).
+                      {" "}Run <span className="font-medium">Re-link from Yelp</span> at the top first, then re-run this check — they&apos;ll resolve to open (drop off) or closed (deletable).
                     </span>
                   </div>
                 )}
