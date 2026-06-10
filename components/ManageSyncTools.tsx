@@ -235,7 +235,8 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
           {unreachable.length > 0 && (
             <div className="space-y-1.5">
               <p className="text-xs font-medium text-yellow-600 dark:text-yellow-400 flex items-center gap-1.5">
-                <ShieldAlert className="w-3.5 h-3.5" /> {unreachable.length} couldn&apos;t be checked — relink or delete
+                <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                <span>{unreachable.length} couldn&apos;t be checked — relink or delete</span>
               </p>
               <p className="text-xs text-muted-foreground">
                 Their Yelp link is broken or missing, so open/closed can&apos;t be confirmed. <span className="font-medium">Edit</span> to relink (Find on Yelp), or <span className="font-medium">Delete</span> if it&apos;s really gone. (Not auto-selected — a broken link can just be a live spot with a stale URL.)

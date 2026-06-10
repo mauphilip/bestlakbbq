@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminToken } from "@/lib/auth";
 import { getAllRestaurants } from "@/lib/getRestaurants";
 import { getYelpId, slugFromUrl } from "@/lib/yelp-shared";
-import { yelpFetch } from "@/lib/yelp-server";
+import { yelpFetch, YelpRateLimitError } from "@/lib/yelp-server";
 import type { Restaurant } from "@/lib/types";
 import type { RestaurantDiff } from "@/lib/yelp-types";
 
@@ -43,10 +43,10 @@ async function checkAll(restaurants: Restaurant[], mode: CheckMode): Promise<Res
     // after the URL was changed), fall back to the slug from the Yelp URL.
     const urlSlug = slugFromUrl(r.yelp_url);
     let biz = await fetchYelpBiz(yid);
-    await delay(100);
+    await delay(220);
     if (!biz && urlSlug && urlSlug !== yid) {
       biz = await fetchYelpBiz(urlSlug);
-      await delay(100);
+      await delay(220);
     }
 
     if (!biz) {
@@ -162,6 +162,12 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (err instanceof YelpRateLimitError || message === "YELP_RATE_LIMIT") {
+      return NextResponse.json(
+        { error: "Yelp's rate limit was hit — wait a few minutes and try again. Nothing was changed.", rateLimited: true },
+        { status: 429 }
+      );
+    }
     console.error("[yelp-check]", message);
     return NextResponse.json({ error: `Server error: ${message}` }, { status: 500 });
   }

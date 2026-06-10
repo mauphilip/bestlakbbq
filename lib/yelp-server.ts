@@ -12,17 +12,25 @@ export function hasYelpKey(): boolean {
   return !!process.env.YELP_API_KEY;
 }
 
-/** GET a Yelp API path (e.g. `/businesses/<id>`). Returns parsed JSON, or null on non-OK/error. */
+/** Thrown when Yelp returns 429 so callers can stop and surface a clear message. */
+export class YelpRateLimitError extends Error {
+  constructor() { super("YELP_RATE_LIMIT"); this.name = "YelpRateLimitError"; }
+}
+
+/** GET a Yelp API path (e.g. `/businesses/<id>`). Returns parsed JSON, null on 4xx/5xx,
+ *  or throws YelpRateLimitError on 429. */
 export async function yelpFetch(path: string): Promise<Record<string, unknown> | null> {
+  let res: Response;
   try {
-    const res = await fetch(`${YELP_API}${path}`, {
+    res = await fetch(`${YELP_API}${path}`, {
       headers: { Authorization: `Bearer ${process.env.YELP_API_KEY}` },
     });
-    if (!res.ok) return null;
-    return res.json();
   } catch {
-    return null;
+    return null; // network error
   }
+  if (res.status === 429) throw new YelpRateLimitError();
+  if (!res.ok) return null;
+  try { return await res.json(); } catch { return null; }
 }
 
 /** Yelp business search. Defaults limit=50; callers pass categories/location/offset/sort_by/limit. */
@@ -34,10 +42,12 @@ export async function yelpSearch(
     const res = await fetch(`${YELP_API}/businesses/search?${qs}`, {
       headers: { Authorization: `Bearer ${process.env.YELP_API_KEY}` },
     });
+    if (res.status === 429) throw new YelpRateLimitError();
     const json = await res.json();
     if (!res.ok) return { businesses: [], total: 0, error: json.error?.description ?? `HTTP ${res.status}` };
     return { businesses: json.businesses ?? [], total: json.total ?? 0 };
   } catch (e) {
+    if (e instanceof YelpRateLimitError) throw e;
     return { businesses: [], total: 0, error: String(e) };
   }
 }

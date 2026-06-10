@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, Plus, Trash2, ExternalLink, CheckCircle, AlertTriangle, Link2, Search, Globe } from "lucide-react";
+import { X, Plus, Trash2, ExternalLink, CheckCircle, AlertTriangle, Link2, Search, Globe, RefreshCw } from "lucide-react";
 import type { Restaurant, AyceTier, PriceTier } from "@/lib/types";
 import { KBBQ_PRICE_RANGES } from "@/lib/types";
 import { isYelpConnected, slugFromUrl, kbbqConfidence, type YelpBizLite } from "@/lib/yelp-shared";
@@ -78,10 +78,33 @@ export default function RestaurantForm({ initial, token, onClose, onSaved, onDel
     setFinding(false);
   }
 
-  function linkBiz(biz: YelpBizLite) {
+  // Apply a Yelp business: link it AND resync its live data (rating/reviews/price).
+  function applyBiz(biz: YelpBizLite) {
     setYelpId(biz.id);
     if (biz.url) setYelpUrl(biz.url.split("?")[0]);
+    if (typeof biz.rating === "number") setYelpRating(biz.rating);
+    if (typeof biz.review_count === "number") setReviewCount(biz.review_count);
+    if (biz.price) setPriceTier(biz.price as PriceTier);
+    setFindError("");
+  }
+
+  function linkBiz(biz: YelpBizLite) {
+    applyBiz(biz);
     setFindResults(null);
+  }
+
+  // Resolve a pasted Yelp URL → fetch the business and resync its data.
+  async function fetchFromUrl() {
+    const slug = slugFromUrl(yelpUrl);
+    if (!slug) { setFindError("Paste a valid yelp.com/biz/… URL first."); return; }
+    setFinding(true); setFindError("");
+    try {
+      const res = await fetch(`/api/yelp?path=${encodeURIComponent("/businesses/" + slug)}`);
+      const biz = await res.json();
+      if (biz?.id) applyBiz(biz as YelpBizLite);
+      else setFindError("Couldn't fetch that Yelp page (it may be rate-limited — try again shortly).");
+    } catch { setFindError("Fetch failed — try again."); }
+    setFinding(false);
   }
 
   function unlink() {
@@ -331,88 +354,92 @@ export default function RestaurantForm({ initial, token, onClose, onSaved, onDel
             </label>
           </div>
 
-          {/* Yelp Connection */}
+          {/* Yelp Connection — URL + link + live-data resync, all in one place */}
           <div>
             <label className="text-sm font-medium block mb-1.5">Yelp Connection</label>
-            {connected ? (
-              <div className="flex items-center gap-2 flex-wrap bg-green-500/5 border border-green-500/20 rounded-lg px-3 py-2.5">
-                <span className="flex items-center gap-1.5 text-sm font-medium text-green-600 dark:text-green-400">
-                  <CheckCircle className="w-4 h-4" /> Connected
-                </span>
-                <span className="text-xs text-muted-foreground truncate flex-1 min-w-0">{yelpId || slugFromUrl(yelpUrl)}</span>
-                <a href={openUrl} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs px-2.5 py-1 border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors shrink-0">
-                  <ExternalLink className="w-3.5 h-3.5" /> Open on Yelp
-                </a>
-                <button type="button" onClick={unlink}
-                  className="text-xs text-muted-foreground hover:text-red-400 transition-colors shrink-0">Unlink</button>
-              </div>
-            ) : (
-              <div className="bg-secondary/50 border border-border rounded-lg px-3 py-2.5 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <Link2 className="w-4 h-4" /> Not connected to Yelp
+            <div className="bg-secondary/50 border border-border rounded-lg p-3 space-y-2.5">
+              {/* Status row */}
+              {connected ? (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="flex items-center gap-1.5 text-sm font-medium text-green-600 dark:text-green-400">
+                    <CheckCircle className="w-4 h-4" /> Connected
                   </span>
-                  <button type="button" onClick={findOnYelp} disabled={finding}
-                    className="flex items-center gap-1 text-xs px-2.5 py-1 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0">
-                    <Search className="w-3.5 h-3.5" /> {finding ? "Searching…" : "Find on Yelp"}
-                  </button>
+                  <span className="text-xs text-muted-foreground truncate flex-1 min-w-0">{yelpId || slugFromUrl(yelpUrl)}</span>
+                  <a href={openUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs px-2 py-1 border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors shrink-0">
+                    <ExternalLink className="w-3.5 h-3.5" /> Open
+                  </a>
+                  {yelpMenuUrl && (
+                    <a href={yelpMenuUrl} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs px-2 py-1 border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors shrink-0">
+                      <ExternalLink className="w-3.5 h-3.5" /> Menu
+                    </a>
+                  )}
+                  <button type="button" onClick={unlink}
+                    className="text-xs text-muted-foreground hover:text-red-400 transition-colors shrink-0">Unlink</button>
                 </div>
-                {findError && <p className="text-xs text-red-400">{findError}</p>}
-                {findResults && findResults.length === 0 && (
-                  <p className="text-xs text-muted-foreground">No Yelp matches found.</p>
-                )}
-                {findResults && findResults.length > 0 && (
-                  <div className="space-y-1.5">
-                    {findResults.map((biz) => {
-                      const conf = kbbqConfidence(biz);
-                      return (
-                        <div key={biz.id} className="flex items-center gap-2 bg-card border border-border rounded-lg px-2.5 py-1.5">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-sm font-medium truncate">{biz.name}</span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
-                                conf === "high" ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20"
-                                : conf === "medium" ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20"
-                                : "bg-red-500/10 text-red-500 border-red-500/20"}`}>
-                                {conf === "high" ? "KBBQ" : conf === "medium" ? "maybe" : "not KBBQ?"}
-                              </span>
-                            </div>
-                            <p className="text-xs text-muted-foreground truncate">
-                              ★ {biz.rating ?? "—"} · {(biz.review_count ?? 0).toLocaleString()} · {biz.location?.address1 ?? ""}
-                            </p>
-                          </div>
-                          <button type="button" onClick={() => linkBiz(biz)}
-                            className="flex items-center gap-1 text-xs px-2 py-1 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors shrink-0">
-                            <Link2 className="w-3 h-3" /> Link
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Yelp URL + menu link */}
-          <div>
-            <label className="text-sm font-medium block mb-1.5">Yelp URL</label>
-            <div className="flex gap-2">
-              <input value={yelpUrl} onChange={(e) => { setYelpUrl(e.target.value); if (yelpId) setYelpId(""); }}
-                placeholder="https://www.yelp.com/biz/..."
-                className="flex-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
-              {yelpMenuUrl && (
-                <a href={yelpMenuUrl} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs px-2.5 py-2 border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors shrink-0">
-                  <ExternalLink className="w-3.5 h-3.5" /> Menu
-                </a>
+              ) : (
+                <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Link2 className="w-4 h-4" /> Not connected to Yelp
+                </span>
               )}
+
+              {/* Paste-a-URL row (resyncs data) */}
+              <div className="flex gap-2">
+                <input value={yelpUrl} onChange={(e) => { setYelpUrl(e.target.value); if (yelpId) setYelpId(""); }}
+                  placeholder="Paste https://www.yelp.com/biz/…"
+                  className="flex-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                <button type="button" onClick={fetchFromUrl} disabled={finding || !slugFromUrl(yelpUrl)}
+                  className="flex items-center gap-1 text-xs px-2.5 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0">
+                  <RefreshCw className={`w-3.5 h-3.5 ${finding ? "animate-spin" : ""}`} /> Sync
+                </button>
+              </div>
+
+              {/* …or search by name */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-muted-foreground">…or search Yelp by name</span>
+                <button type="button" onClick={findOnYelp} disabled={finding}
+                  className="flex items-center gap-1 text-xs px-2.5 py-1 border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors shrink-0">
+                  <Search className="w-3.5 h-3.5" /> {finding ? "Searching…" : "Find on Yelp"}
+                </button>
+              </div>
+
+              {findError && <p className="text-xs text-red-400">{findError}</p>}
+              {findResults && findResults.length === 0 && (
+                <p className="text-xs text-muted-foreground">No Yelp matches found.</p>
+              )}
+              {findResults && findResults.length > 0 && (
+                <div className="space-y-1.5">
+                  {findResults.map((biz) => {
+                    const conf = kbbqConfidence(biz);
+                    return (
+                      <div key={biz.id} className="flex items-center gap-2 bg-card border border-border rounded-lg px-2.5 py-1.5">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-sm font-medium truncate">{biz.name}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
+                              conf === "high" ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20"
+                              : conf === "medium" ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20"
+                              : "bg-red-500/10 text-red-500 border-red-500/20"}`}>
+                              {conf === "high" ? "KBBQ" : conf === "medium" ? "maybe" : "not KBBQ?"}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">
+                            ★ {biz.rating ?? "—"} · {(biz.review_count ?? 0).toLocaleString()} · {biz.location?.address1 ?? ""}
+                          </p>
+                        </div>
+                        <button type="button" onClick={() => linkBiz(biz)}
+                          className="flex items-center gap-1 text-xs px-2 py-1 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors shrink-0">
+                          <Link2 className="w-3 h-3" /> Link
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <p className="text-xs text-muted-foreground/70">Linking (or Sync) pulls the latest rating, reviews, and price from Yelp.</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Pasting a <code className="bg-secondary px-1 rounded">/biz/</code> URL also links it.
-              {yelpMenuUrl && " Open the menu to verify prices."}
-            </p>
           </div>
 
           {/* Website */}
