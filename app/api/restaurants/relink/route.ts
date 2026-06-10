@@ -12,6 +12,13 @@ import type { Restaurant } from "@/lib/types";
 //   dryRun (default true) → returns proposed corrections, writes nothing
 //   dryRun:false          → writes CONFIDENT corrections to KV
 
+// A match must look like a Korean/BBQ/food business — guards against linking a
+// same-named non-restaurant (e.g. "Man Soo" → a Farmers Insurance agency).
+const FOODISH = /korean|bbq|barbeque|barbecue|hotpot|gopchang|noodle|tofu|restaurant|food/i;
+function isFoodish(b: YelpBizLite): boolean {
+  return (b.categories ?? []).some((c) => FOODISH.test(c.alias) || FOODISH.test(c.title ?? ""));
+}
+
 const STOP = new Set(["bbq", "kbbq", "korean", "the", "los", "angeles", "restaurant", "house", "grill"]);
 const norm = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 function tokenize(s: string): Set<string> {
@@ -55,6 +62,7 @@ export async function POST(req: NextRequest) {
     await delay(150);
 
     const ranked = businesses
+      .filter(isFoodish) // never match a non-restaurant
       .map((b: YelpBizLite) => ({ b, score: matchScore(r.name, b.name) }))
       .sort((x, y) => y.score - x.score);
     const top = ranked[0];
