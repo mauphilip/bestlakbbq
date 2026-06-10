@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Lock, Trash2, Download, ShieldCheck, RefreshCw, AlertTriangle, CheckCircle, Plus } from "lucide-react";
+import { Lock, Trash2, Download, ShieldCheck, AlertTriangle, CheckCircle, Plus } from "lucide-react";
 import type { Restaurant } from "@/lib/types";
 import { KBBQ_PRICE_RANGES } from "@/lib/types";
 import AdminSearchPanel from "@/components/AdminSearchPanel";
@@ -25,9 +25,9 @@ export default function AdminPage() {
   const [editTarget, setEditTarget] = useState<Restaurant | null>(null);
   const [addNew, setAddNew] = useState(false);
   const [activeTab, setActiveTab] = useState<"search" | "manage" | "neighborhoods">("manage");
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshResult, setRefreshResult] = useState<{ updated: number; notFound: number } | null>(null);
+  const [manageTab, setManageTab] = useState<"list" | "sync">("list");
   const [searchFilter, setSearchFilter] = useState("");
+  const [priceFilter, setPriceFilter] = useState(false); // show only "needs price check"
   const [zipOverrides, setZipOverrides] = useState<Record<string, string>>({});
   const [newZip, setNewZip] = useState("");
   const [newNeighborhood, setNewNeighborhood] = useState("");
@@ -74,33 +74,12 @@ export default function AdminPage() {
   }
 
   async function deleteRestaurant(id: string, name: string) {
-    if (!confirm(`Delete "${name}" from KV?`)) return;
+    if (!confirm(`Remove "${name}" from the list?`)) return;
     await fetch(`/api/restaurants/${id}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
     setRestaurants((prev) => prev.filter((r) => r.id !== id));
-  }
-
-  async function refreshFromYelp() {
-    setRefreshing(true);
-    setRefreshResult(null);
-    try {
-      const res = await fetch("/api/restaurants/refresh", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({}),
-      });
-      const data = await res.json();
-      setRefreshResult({ updated: data.updated, notFound: data.notFound });
-      await loadRestaurants(); // reload with fresh data
-    } catch {
-      setRefreshResult({ updated: 0, notFound: -1 });
-    }
-    setRefreshing(false);
   }
 
   function exportJson() {
@@ -136,10 +115,12 @@ export default function AdminPage() {
 
   const unverifiedCount = restaurants.filter((r) => !r.price_verified).length;
 
-  const filtered = restaurants.filter((r) =>
-    !searchFilter || r.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
-    r.neighborhood.toLowerCase().includes(searchFilter.toLowerCase())
-  );
+  const filtered = restaurants.filter((r) => {
+    if (priceFilter && r.price_verified) return false;
+    if (!searchFilter) return true;
+    const q = searchFilter.toLowerCase();
+    return r.name.toLowerCase().includes(q) || r.neighborhood.toLowerCase().includes(q);
+  });
 
   // ── Login screen ──────────────────────────────────────────────────────────
   if (!token) {
@@ -189,11 +170,6 @@ export default function AdminPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={refreshFromYelp} disabled={refreshing}
-            className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-border rounded-lg hover:bg-foreground/5 transition-colors disabled:opacity-50">
-            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
-            {refreshing ? "Syncing Yelp…" : "Sync from Yelp"}
-          </button>
           <button onClick={exportJson}
             className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-border rounded-lg hover:bg-foreground/5 transition-colors">
             <Download className="w-4 h-4" /> Export JSON
@@ -204,21 +180,6 @@ export default function AdminPage() {
           </button>
         </div>
       </div>
-
-      {/* Refresh result banner */}
-      {refreshResult && (
-        <div className={`rounded-xl px-4 py-3 text-sm mb-4 flex items-center gap-2 ${
-          refreshResult.notFound === -1
-            ? "bg-red-500/10 border border-red-500/20 text-red-400"
-            : "bg-green-500/10 border border-green-500/20 text-green-400"
-        }`}>
-          {refreshResult.notFound === -1 ? (
-            <><AlertTriangle className="w-4 h-4" /> Yelp sync failed — check YELP_API_KEY env var</>
-          ) : (
-            <><CheckCircle className="w-4 h-4" /> Synced {refreshResult.updated} restaurants from Yelp · {refreshResult.notFound} not found</>
-          )}
-        </div>
-      )}
 
       {/* Tabs */}
       <div className="flex border-b border-border mb-6">
@@ -239,17 +200,46 @@ export default function AdminPage() {
       {/* ── Manage tab ── */}
       {activeTab === "manage" && (
         <div className="space-y-4">
-          {/* Yelp sync tools */}
-          <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-muted-foreground">Yelp sync &amp; review</h2>
-            <ManageSyncTools token={token} onUpdated={loadRestaurants} />
-          </section>
+          {/* Manage subtabs */}
+          <div className="flex gap-1 p-1 bg-secondary/50 rounded-lg w-fit">
+            {([
+              { key: "list", label: "Restaurants" },
+              { key: "sync", label: "Yelp Sync" },
+            ] as const).map(({ key, label }) => (
+              <button key={key} onClick={() => setManageTab(key)}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  manageTab === key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}>
+                {label}
+              </button>
+            ))}
+          </div>
 
+          {/* ── Yelp Sync subtab ── */}
+          {manageTab === "sync" && (
+            <ManageSyncTools
+              token={token}
+              onUpdated={loadRestaurants}
+              onEditRestaurant={(id) => {
+                const r = restaurants.find((x) => x.id === id);
+                if (r) setEditTarget(r);
+              }}
+            />
+          )}
+
+          {/* ── Restaurants subtab ── */}
+          {manageTab === "list" && (<>
           {/* Toolbar */}
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
             <input value={searchFilter} onChange={(e) => setSearchFilter(e.target.value)}
               placeholder="Filter by name or neighborhood…"
-              className="flex-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+              className="flex-1 min-w-[180px] bg-secondary border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+            <button onClick={() => setPriceFilter((v) => !v)}
+              className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border transition-colors shrink-0 ${
+                priceFilter ? "bg-yellow-500/15 border-yellow-500/40 text-yellow-600 dark:text-yellow-400" : "border-border text-muted-foreground hover:text-foreground"
+              }`} title="Show only restaurants whose price hasn't been manually verified">
+              <AlertTriangle className="w-4 h-4" /> Needs price check{unverifiedCount > 0 ? ` (${unverifiedCount})` : ""}
+            </button>
             <button onClick={() => setAddNew(true)}
               className="flex items-center gap-1.5 text-sm px-3 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors shrink-0">
               <Plus className="w-4 h-4" /> Add New
@@ -265,7 +255,6 @@ export default function AdminPage() {
           ) : (
             <div className="space-y-2">
               {filtered.map((r) => {
-                const isKv = r.kv_managed;
                 const cost = r.ayce
                   ? r.ayce_tiers.length && r.ayce_tiers[0].price > 0
                     ? `$${Math.min(...r.ayce_tiers.map((t) => t.price))}${r.ayce_tiers.length > 1 ? "–$" + Math.max(...r.ayce_tiers.map((t) => t.price)) : ""} AYCE`
@@ -285,9 +274,6 @@ export default function AdminPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium truncate">{r.name}</span>
-                        {isKv && (
-                          <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded border border-primary/20 shrink-0">KV</span>
-                        )}
                         {isYelpConnected(r) ? (
                           <span className="text-xs px-1.5 py-0.5 bg-green-500/10 text-green-500 rounded border border-green-500/20 shrink-0">Yelp ✓</span>
                         ) : (
@@ -314,18 +300,21 @@ export default function AdminPage() {
                       </p>
                     </div>
                     <div className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                      {isKv && (
-                        <button onClick={() => deleteRestaurant(r.id, r.name)}
-                          className="flex items-center gap-1 text-xs px-2 py-1 border border-red-500/20 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      )}
+                      <button onClick={() => deleteRestaurant(r.id, r.name)}
+                        className="flex items-center gap-1 text-xs px-2 py-1 border border-red-500/20 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
+                        title="Remove from the list">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
                     </div>
                   </div>
                 );
               })}
+              {filtered.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-8">No restaurants match this filter.</p>
+              )}
             </div>
           )}
+          </>)}
         </div>
       )}
 

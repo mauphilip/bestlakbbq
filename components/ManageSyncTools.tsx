@@ -11,17 +11,8 @@ import type { RestaurantDiff } from "@/lib/yelp-types";
 interface Props {
   token: string;
   onUpdated?: () => void;
-}
-
-interface LinkResult {
-  id: string;
-  name: string;
-  neighborhood: string;
-  yelp_url: string;
-  candidates: {
-    yelp_id: string; name: string; url: string; rating: number;
-    review_count: number; address: string; categories: string[];
-  }[];
+  /** Open the edit form for a restaurant (used by "Link manually" on re-link stragglers). */
+  onEditRestaurant?: (id: string) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -47,7 +38,7 @@ function DiffValue({
   );
 }
 
-export default function ManageSyncTools({ token, onUpdated }: Props) {
+export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: Props) {
   // ── Re-link from Yelp ──────────────────────────────────────────────────────────
   const [relinking, setRelinking] = useState(false);
   const [relinkError, setRelinkError] = useState("");
@@ -74,13 +65,6 @@ export default function ManageSyncTools({ token, onUpdated }: Props) {
   const [syncError, setSyncError] = useState("");
   const [syncStats, setSyncStats] = useState<{ changedCount: number; upToDateCount: number; errorCount: number } | null>(null);
   const [syncLastChecked, setSyncLastChecked] = useState<string | null>(null);
-
-  // ── Yelp link ────────────────────────────────────────────────────────────────
-  const [linkScanning, setLinkScanning] = useState(false);
-  const [linkResults, setLinkResults] = useState<LinkResult[] | null>(null);
-  const [linkError, setLinkError] = useState("");
-  const [savingLink, setSavingLink] = useState<string | null>(null);
-  const [savedLinks, setSavedLinks] = useState<Set<string>>(new Set());
 
   // Restore cached sync/closure results
   useEffect(() => {
@@ -256,39 +240,6 @@ export default function ManageSyncTools({ token, onUpdated }: Props) {
   }
 
   // ── Yelp link actions ─────────────────────────────────────────────────────
-  async function runLinkScan() {
-    setLinkScanning(true);
-    setLinkError("");
-    setLinkResults(null);
-    try {
-      const res = await fetch("/api/restaurants/yelp-link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ mode: "scan" }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? `HTTP ${res.status}`);
-      setLinkResults(data.results ?? []);
-    } catch (e) { setLinkError(String(e)); }
-    setLinkScanning(false);
-  }
-
-  async function saveLink(restaurantId: string, yelp_id: string, yelp_url: string) {
-    setSavingLink(restaurantId);
-    try {
-      const res = await fetch("/api/restaurants/yelp-link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ id: restaurantId, yelp_id, yelp_url }),
-      });
-      if (res.ok) {
-        setSavedLinks((s) => new Set(s).add(restaurantId));
-        onUpdated?.();
-      }
-    } catch { /* ignore */ }
-    setSavingLink(null);
-  }
-
   const syncAllChangedCount = diffsWithChanges.filter((d) => !appliedIds.has(d.id)).length;
   const selectedNotApplied = [...selectedSync].filter((id) => !appliedIds.has(id)).length;
 
@@ -348,7 +299,7 @@ export default function ManageSyncTools({ token, onUpdated }: Props) {
             </div>
             {relinkResult.dryRun && (
               <p className="text-xs text-muted-foreground">
-                Preview only — nothing changed. Click <span className="font-medium">Apply</span> to write the confident fixes.
+                Preview only — nothing changed. Click <span className="font-medium">Apply</span> to write the confident fixes. Review the ⚠️ / ❌ below by hand.
               </p>
             )}
             {!relinkResult.dryRun && (
@@ -357,6 +308,64 @@ export default function ManageSyncTools({ token, onUpdated }: Props) {
                 Re-linked {relinkResult.summary.applied} restaurants. Re-run the closure/sync checks to see corrected data.
               </div>
             )}
+
+            {/* Needs-attention: low-confidence + no-match (always surfaced so you know to check) */}
+            {(() => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const rows: any[] = relinkResult.results ?? [];
+              const weak = rows.filter((r) => r.status === "weak");
+              const noMatch = rows.filter((r) => r.status === "no_match");
+              const confident = rows.filter((r) => r.status === "confident");
+              if (!weak.length && !noMatch.length && !confident.length) return null;
+              return (
+                <div className="space-y-3 pt-1">
+                  {(weak.length > 0 || noMatch.length > 0) && (
+                    <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-3 space-y-2">
+                      <p className="text-xs font-semibold text-yellow-600 dark:text-yellow-400">
+                        {weak.length + noMatch.length} need a manual check
+                      </p>
+                      {[...weak, ...noMatch].map((r) => (
+                        <div key={r.id} className="flex items-center gap-2 text-xs">
+                          <span className="shrink-0">{r.status === "weak" ? "⚠️" : "❌"}</span>
+                          <span className="font-medium truncate">{r.name}</span>
+                          {r.status === "weak" && r.match_name && (
+                            <span className="text-muted-foreground truncate">
+                              best guess: {r.match_name} ({r.score})
+                            </span>
+                          )}
+                          {r.status === "no_match" && <span className="text-muted-foreground">no Yelp match</span>}
+                          {onEditRestaurant && (
+                            <button onClick={() => onEditRestaurant(r.id)}
+                              className="ml-auto shrink-0 px-2 py-0.5 border border-border rounded-md text-primary hover:bg-primary/10 transition-colors">
+                              Link manually
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {confident.length > 0 && (
+                    <details className="rounded-lg border border-border overflow-hidden">
+                      <summary className="cursor-pointer list-none select-none px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-foreground/[0.03]">
+                        {confident.length} confident {relinkResult.dryRun ? "fixes (preview)" : "fixed"}
+                      </summary>
+                      <div className="border-t border-border divide-y divide-border/40">
+                        {confident.map((r) => (
+                          <div key={r.id} className="flex items-center gap-2 px-3 py-1.5 text-xs">
+                            <span className="font-medium truncate max-w-[40%]">{r.name}</span>
+                            <span className="text-muted-foreground/50 line-through truncate">{r.cur_slug ?? "—"}</span>
+                            <ArrowRight className="w-3 h-3 text-primary shrink-0" />
+                            <span className="text-primary truncate">{r.new_slug}</span>
+                            {r.is_closed && <span className="text-red-400 shrink-0">[closed]</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
@@ -631,96 +640,6 @@ export default function ManageSyncTools({ token, onUpdated }: Props) {
               </div>
             )}
           </>
-        )}
-      </div>
-
-      {/* ── Section 3: Link to Yelp ──────────────────────────────────── */}
-      <div className="rounded-xl border border-border p-4 space-y-3">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h3 className="text-sm font-semibold">Link Restaurants to Yelp</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Searches Yelp by name for each restaurant without a Yelp ID. Once linked, they&apos;ll be included in future sync checks.
-            </p>
-          </div>
-          <button onClick={runLinkScan} disabled={linkScanning}
-            className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 shrink-0 transition-colors">
-            <RefreshCw className={`w-4 h-4 ${linkScanning ? "animate-spin" : ""}`} />
-            {linkScanning ? "Scanning…" : "Scan Unlinked (takes ~1 min)"}
-          </button>
-        </div>
-
-        {linkError && <ErrorBox msg={linkError} />}
-        {linkScanning && <LoadingSpinner label="Searching Yelp for each unlinked restaurant…" />}
-
-        {linkResults && !linkScanning && (
-          <div className="space-y-3">
-            <p className="text-xs font-medium text-muted-foreground">{linkResults.length} restaurant{linkResults.length !== 1 ? "s" : ""} need Yelp links</p>
-            {linkResults.length === 0 ? (
-              <div className="flex items-center gap-2 text-sm text-green-500">
-                <CheckCircle className="w-4 h-4" /> All restaurants have Yelp links.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {linkResults.map((result) => {
-                  const isLinked = savedLinks.has(result.id);
-                  const isSaving = savingLink === result.id;
-                  return (
-                    <div key={result.id} className="rounded-xl border border-border p-3 space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <span className="text-sm font-semibold">{result.name}</span>
-                          <span className="text-xs text-muted-foreground ml-2">{result.neighborhood}</span>
-                        </div>
-                        {isLinked && (
-                          <span className="flex items-center gap-1 text-xs text-green-500 font-medium shrink-0">
-                            <CheckCircle className="w-3.5 h-3.5" /> Linked
-                          </span>
-                        )}
-                      </div>
-                      {result.candidates.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic">No Yelp matches found</p>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {result.candidates.slice(0, 3).map((c) => {
-                            const nameMismatch = !c.name.toLowerCase().includes(result.name.split(" ")[0].toLowerCase());
-                            return (
-                              <div key={c.yelp_id} className="flex items-center gap-3 rounded-lg border border-border bg-card/50 px-3 py-2">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    {nameMismatch && <span title="Name doesn't closely match" className="text-yellow-500 text-xs">⚠</span>}
-                                    <span className="text-sm font-medium">{c.name}</span>
-                                    <span className="text-xs text-muted-foreground">★ {c.rating}</span>
-                                    <span className="text-xs text-muted-foreground">· {c.review_count} reviews</span>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground truncate">
-                                    {c.address}
-                                    {c.categories.length > 0 && <span className="opacity-70"> · {c.categories.slice(0, 2).join(", ")}</span>}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <a href={c.url} target="_blank" rel="noopener noreferrer" className="text-primary">
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                  </a>
-                                  {!isLinked && (
-                                    <button onClick={() => saveLink(result.id, c.yelp_id, c.url)}
-                                      disabled={isSaving}
-                                      className="px-2.5 py-1 bg-primary text-primary-foreground text-xs font-medium rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
-                                      {isSaving ? "Saving…" : "Link"}
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
         )}
       </div>
 
