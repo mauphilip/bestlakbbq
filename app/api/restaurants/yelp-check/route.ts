@@ -163,8 +163,15 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (err instanceof YelpRateLimitError || message === "YELP_RATE_LIMIT") {
+      const e = err instanceof YelpRateLimitError ? err : null;
       return NextResponse.json(
-        { error: "Yelp's rate limit was hit — wait a few minutes and try again. Nothing was changed.", rateLimited: true },
+        {
+          error: "Yelp's rate limit was hit. Nothing was changed.",
+          rateLimited: true,
+          retryAfter: e?.retryAfter ?? null,
+          resetTime: e?.resetTime ?? null,
+          dailyLimit: e?.dailyLimit ?? null,
+        },
         { status: 429 }
       );
     }

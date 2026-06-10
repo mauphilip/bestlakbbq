@@ -31,6 +31,26 @@ function DiffValue({ cur, next, suffix = "", fmt }: {
 const nameOf = (d: RestaurantDiff) =>
   d.name || d.yelp_id || d.yelp_url?.match(/yelp\.com\/biz\/([^?#/]+)/)?.[1] || "Unknown restaurant";
 
+// Build a clear rate-limit message from Yelp's own reset/retry hints.
+function fmtRateLimit(data: { resetTime?: string | null; retryAfter?: string | null }): string {
+  let when = "";
+  if (data.resetTime) {
+    const d = new Date(data.resetTime);
+    if (!isNaN(d.getTime())) when = `resumes ${d.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })}`;
+  }
+  if (!when && data.retryAfter) when = `retry in ~${data.retryAfter}s`;
+  return `Yelp rate limit reached${when ? " — " + when : ""}. See the Yelp Connector subtab for your remaining quota. Nothing was changed.`;
+}
+
+function RecheckBtn({ id, busy, onClick }: { id: string; busy: boolean; onClick: (id: string) => void }) {
+  return (
+    <button onClick={() => onClick(id)} disabled={busy} title="Re-check this one against Yelp"
+      className="flex items-center gap-1 px-2 py-1 border border-border text-xs rounded-md text-muted-foreground hover:text-foreground hover:bg-foreground/5 disabled:opacity-50 transition-colors shrink-0">
+      <RefreshCw className={`w-3 h-3 ${busy ? "animate-spin" : ""}`} /> {busy ? "Checking…" : "Re-check"}
+    </button>
+  );
+}
+
 // One pass over Yelp: surfaces data updates to apply, Yelp-confirmed closures to
 // remove, and broken links to fix. Deletes are review-only (never auto-selected),
 // and only Yelp-confirmed-closed rows are deletable here.
@@ -46,6 +66,7 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [recheckingId, setRecheckingId] = useState<string | null>(null);
 
   // Restore cached results
   useEffect(() => {
@@ -102,6 +123,7 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let data: any;
       try { data = JSON.parse(text); } catch { throw new Error(text || `HTTP ${res.status}`); }
+      if (res.status === 429 || data.rateLimited) { setSyncError(fmtRateLimit(data)); setSyncing(false); return; }
       if (!res.ok || data.error) throw new Error((data.error as string) ?? `HTTP ${res.status}`);
       const results: RestaurantDiff[] = data.results ?? [];
       const timestamp = new Date().toISOString();
@@ -112,6 +134,35 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
       setSelected(new Set(results.filter((d) => !d.error && !d.yelp?.is_closed && d.changes.length > 0).map((d) => d.id)));
     } catch (e) { setSyncError(String(e)); }
     setSyncing(false);
+  }
+
+  // Re-check a single restaurant against Yelp (e.g. right after you edit/relink it).
+  async function recheckOne(id: string) {
+    setRecheckingId(id);
+    try {
+      const res = await fetch("/api/restaurants/yelp-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ mode: "updates", ids: [id] }),
+      });
+      const data = await res.json();
+      if (res.status === 429 || data.rateLimited) { setSyncError(fmtRateLimit(data)); setRecheckingId(null); return; }
+      if (!res.ok || data.error) { setSyncError(data.error ?? `HTTP ${res.status}`); setRecheckingId(null); return; }
+      const one: RestaurantDiff | undefined = (data.results ?? [])[0];
+      setDiffs((prev) => {
+        const base = prev ?? [];
+        const next = one
+          ? (base.some((d) => d.id === id) ? base.map((d) => (d.id === id ? one : d)) : [...base, one])
+          : base.filter((d) => d.id !== id);
+        persist({ results: next });
+        return next;
+      });
+      // Let the refreshed result show: clear any applied/deleted flag for this id.
+      setAppliedIds((s) => { if (!s.has(id)) return s; const n = new Set(s); n.delete(id); persist({ appliedIds: [...n] }); return n; });
+      setDeletedIds((s) => { if (!s.has(id)) return s; const n = new Set(s); n.delete(id); persist({ deletedIds: [...n] }); return n; });
+      setSyncError("");
+    } catch (e) { setSyncError(String(e)); }
+    setRecheckingId(null);
   }
 
   async function applySelected() {
@@ -216,6 +267,7 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
                       Yelp <ExternalLink className="w-3 h-3" />
                     </a>
                   )}
+                  <RecheckBtn id={d.id} busy={recheckingId === d.id} onClick={recheckOne} />
                   {onEditRestaurant && (
                     <button onClick={() => onEditRestaurant(d.id)}
                       className="flex items-center gap-1 px-2 py-1 border border-border text-xs rounded-md text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors shrink-0">
@@ -254,6 +306,7 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
                       Yelp <ExternalLink className="w-3 h-3" />
                     </a>
                   )}
+                  <RecheckBtn id={d.id} busy={recheckingId === d.id} onClick={recheckOne} />
                   {onEditRestaurant && (
                     <button onClick={() => onEditRestaurant(d.id)}
                       className="flex items-center gap-1 px-2 py-1 border border-border text-xs rounded-md text-primary hover:bg-primary/10 transition-colors shrink-0">
@@ -311,6 +364,10 @@ export default function ManageSyncTools({ token, onUpdated, onEditRestaurant }: 
                             Yelp <ExternalLink className="w-3 h-3" />
                           </a>
                         )}
+                        <button onClick={() => recheckOne(diff.id)} disabled={recheckingId === diff.id} title="Re-check this one against Yelp"
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-50 shrink-0">
+                          <RefreshCw className={`w-3.5 h-3.5 ${recheckingId === diff.id ? "animate-spin" : ""}`} />
+                        </button>
                         {onEditRestaurant && (
                           <button onClick={() => onEditRestaurant(diff.id)} title="Edit"
                             className="text-muted-foreground hover:text-foreground shrink-0">

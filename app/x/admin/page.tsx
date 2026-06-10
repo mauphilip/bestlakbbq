@@ -136,7 +136,7 @@ export default function AdminPage() {
   const [zipMapDirty, setZipMapDirty] = useState(false);
   const [savingMap, setSavingMap] = useState(false);
   const [nhView, setNhView] = useState<"grouped" | "flat">("grouped");
-  const [nhSort, setNhSort] = useState<"zip" | "neighborhood">("zip");
+  const [nhSort, setNhSort] = useState<"asc" | "desc">("asc");
   const [selectedZips, setSelectedZips] = useState<Set<string>>(new Set());
   const [bulkNeighborhood, setBulkNeighborhood] = useState("");
 
@@ -283,9 +283,7 @@ export default function AdminPage() {
 
   // Neighborhood map derived data
   const sortedZips = Object.keys(zipMap).sort((a, b) =>
-    nhSort === "neighborhood"
-      ? (zipMap[a].localeCompare(zipMap[b]) || a.localeCompare(b))
-      : a.localeCompare(b)
+    nhSort === "desc" ? b.localeCompare(a) : a.localeCompare(b)
   );
   const neighborhoodNames = Array.from(new Set(Object.values(zipMap))).sort((a, b) => a.localeCompare(b));
   const groups: Record<string, string[]> = {};
@@ -587,8 +585,8 @@ export default function AdminPage() {
           {nhView === "flat" && (
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-2 border-b border-border text-xs">
-                <span className="text-muted-foreground">{sortedZips.length} zips · sort by</span>
-                {([["zip", "Zip"], ["neighborhood", "Neighborhood"]] as const).map(([k, label]) => (
+                <span className="text-muted-foreground">{sortedZips.length} zips · sort</span>
+                {([["asc", "Zip ↑"], ["desc", "Zip ↓"]] as const).map(([k, label]) => (
                   <button key={k} onClick={() => setNhSort(k)}
                     className={`px-2 py-0.5 rounded-md border transition-colors ${nhSort === k ? "bg-primary/15 border-primary/40 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
                     {label}

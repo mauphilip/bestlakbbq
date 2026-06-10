@@ -12,9 +12,19 @@ export function hasYelpKey(): boolean {
   return !!process.env.YELP_API_KEY;
 }
 
-/** Thrown when Yelp returns 429 so callers can stop and surface a clear message. */
+/** Thrown when Yelp returns 429 so callers can stop and surface a clear message.
+ *  Carries Yelp's own retry/reset hints from the response headers. */
 export class YelpRateLimitError extends Error {
-  constructor() { super("YELP_RATE_LIMIT"); this.name = "YelpRateLimitError"; }
+  retryAfter: string | null;
+  resetTime: string | null;
+  dailyLimit: string | null;
+  constructor(res?: Response) {
+    super("YELP_RATE_LIMIT");
+    this.name = "YelpRateLimitError";
+    this.retryAfter = res?.headers.get("Retry-After") ?? null;
+    this.resetTime = res?.headers.get("RateLimit-ResetTime") ?? null;
+    this.dailyLimit = res?.headers.get("RateLimit-DailyLimit") ?? null;
+  }
 }
 
 /** GET a Yelp API path (e.g. `/businesses/<id>`). Returns parsed JSON, null on 4xx/5xx,
@@ -28,7 +38,7 @@ export async function yelpFetch(path: string): Promise<Record<string, unknown> |
   } catch {
     return null; // network error
   }
-  if (res.status === 429) throw new YelpRateLimitError();
+  if (res.status === 429) throw new YelpRateLimitError(res);
   if (!res.ok) return null;
   try { return await res.json(); } catch { return null; }
 }
@@ -42,7 +52,7 @@ export async function yelpSearch(
     const res = await fetch(`${YELP_API}/businesses/search?${qs}`, {
       headers: { Authorization: `Bearer ${process.env.YELP_API_KEY}` },
     });
-    if (res.status === 429) throw new YelpRateLimitError();
+    if (res.status === 429) throw new YelpRateLimitError(res);
     const json = await res.json();
     if (!res.ok) return { businesses: [], total: 0, error: json.error?.description ?? `HTTP ${res.status}` };
     return { businesses: json.businesses ?? [], total: json.total ?? 0 };
