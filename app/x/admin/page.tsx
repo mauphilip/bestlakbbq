@@ -217,15 +217,7 @@ export default function AdminPage() {
 
           {/* ── Yelp Sync subtab ── */}
           {manageTab === "sync" && (
-            <ManageSyncTools
-              token={token}
-              restaurants={restaurants}
-              onUpdated={loadRestaurants}
-              onEditRestaurant={(id) => {
-                const r = restaurants.find((x) => x.id === id);
-                if (r) setEditTarget(r);
-              }}
-            />
+            <ManageSyncTools token={token} onUpdated={loadRestaurants} />
           )}
 
           {/* ── Restaurants subtab ── */}
@@ -490,6 +482,10 @@ export default function AdminPage() {
           onClose={() => setEditTarget(null)}
           onSaved={(r) => {
             setRestaurants((prev) => prev.map((x) => x.id === r.id ? r : x));
+            setEditTarget(null);
+          }}
+          onDeleted={(id) => {
+            setRestaurants((prev) => prev.filter((x) => x.id !== id));
             setEditTarget(null);
           }}
         />

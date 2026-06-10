@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 
 ## [Unreleased]
 
+### Added
+- **Delete button on the restaurant edit form** — soft-deletes base-JSON restaurants, hard-deletes admin-added ones (you no longer have to delete only from the list row).
+
+### Removed
+- **The bulk "Re-link from Yelp" tool** (and its API route). It was one-time scaffolding to link the imported data; once restaurants are linked it started re-proposing bad changes against manual fixes (and cached stale results). Link/fix individual restaurants via the edit form's **Find on Yelp**; use **Sync Updates** + **Check Closed** as the steady state.
+
 ### Fixed
 - Closure check: clarified the "couldn't be checked" warning (was mislabeled as a closure and pointed the wrong way) — it now explains the Yelp link is stale/missing and to run **Re-link from Yelp** first, then re-check.
 - **Re-link no-match / low-confidence rows now actually show up to process.** They were being wrongly hidden because a restaurant with a *stale* Yelp URL counted as "linked"; rows now only drop off once their link genuinely changes (you re-linked it) or they're deleted.
