@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminToken } from "@/lib/auth";
 import { redis, KV_RESTAURANT_PREFIX } from "@/lib/kv";
 import { getAllRestaurants } from "@/lib/getRestaurants";
-import { slugFromUrl, KBBQ_CATEGORY, type YelpBizLite } from "@/lib/yelp-shared";
+import { slugFromUrl, getYelpId, KBBQ_CATEGORY, type YelpBizLite } from "@/lib/yelp-shared";
 import { yelpSearch, hasYelpKey } from "@/lib/yelp-server";
 import type { Restaurant } from "@/lib/types";
 
@@ -59,10 +59,18 @@ export async function POST(req: NextRequest) {
       .sort((x, y) => y.score - x.score);
     const top = ranked[0];
     const curSlug = slugFromUrl(r.yelp_url);
+    const curId = getYelpId(r); // yelp_id if present, else url slug — the canonical "is it linked" value
 
     if (!top || top.score < 0.34) {
-      noMatch++;
-      results.push({ id: r.id, name: r.name, status: "no_match", cur_slug: curSlug, new_slug: null, score: top?.score ?? 0 });
+      // Already linked but the name search was inconclusive → leave it alone ("same"),
+      // don't flag it as a no-match that needs attention. Only truly unlinked + unfound → no_match.
+      if (curId) {
+        same++;
+        results.push({ id: r.id, name: r.name, status: "same", cur_slug: curSlug, cur_id: curId, new_slug: curSlug, score: top?.score ?? 0 });
+      } else {
+        noMatch++;
+        results.push({ id: r.id, name: r.name, status: "no_match", cur_slug: curSlug, cur_id: curId, new_slug: null, score: top?.score ?? 0 });
+      }
       continue;
     }
 
@@ -92,7 +100,7 @@ export async function POST(req: NextRequest) {
 
     results.push({
       id: r.id, name: r.name, status: changed ? confidence : "same",
-      cur_slug: curSlug, new_slug: newSlug, match_name: top.b.name,
+      cur_slug: curSlug, cur_id: curId, new_slug: newSlug, match_name: top.b.name,
       score: Number(top.score.toFixed(2)),
       rating: top.b.rating, review_count: top.b.review_count,
       is_closed: !!top.b.is_closed, applied: willApply,

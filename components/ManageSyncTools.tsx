@@ -381,8 +381,11 @@ export default function ManageSyncTools({ token, restaurants, onUpdated, onEditR
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const gone = (row: any) => {
                 if (relinkRemoved.has(row.id)) return true;
-                const now = currentLink.get(row.id);
-                return now != null && now !== row.cur_slug; // re-linked since the scan
+                const now = currentLink.get(row.id) ?? null;
+                // Compare against the SAME basis the scan recorded (yelp_id-or-slug).
+                // Falls back to cur_slug for results cached before cur_id existed.
+                const baseline = (row.cur_id !== undefined ? row.cur_id : row.cur_slug) ?? null;
+                return now !== baseline; // link changed since the scan (you re-linked it)
               };
               const weak = rows.filter((r) => r.status === "weak" && !gone(r));
               const noMatch = rows.filter((r) => r.status === "no_match" && !gone(r));

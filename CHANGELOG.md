@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 - Closure check: clarified the "couldn't be checked" warning (was mislabeled as a closure and pointed the wrong way) — it now explains the Yelp link is stale/missing and to run **Re-link from Yelp** first, then re-check.
 - **Re-link no-match / low-confidence rows now actually show up to process.** They were being wrongly hidden because a restaurant with a *stale* Yelp URL counted as "linked"; rows now only drop off once their link genuinely changes (you re-linked it) or they're deleted.
 - **Re-link now covers admin-added (KV-only) restaurants**, not just the base JSON list — so restaurants you added that have no Yelp ID finally appear (matches what Sync Data reports).
+- Re-link no longer flags an already-linked restaurant as "no match" just because the name search was inconclusive (it's left alone as "already correct"), and a genuine no-match row no longer gets wrongly hidden when the restaurant already had a Yelp id — so you can always see/act on what the no-match actually is.
 
 ## [0.3.0] — 2026-06-09
 
