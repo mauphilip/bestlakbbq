@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, Plus, Trash2, ExternalLink, CheckCircle, AlertTriangle, Link2, Search } from "lucide-react";
+import { X, Plus, Trash2, ExternalLink, CheckCircle, AlertTriangle, Link2, Search, Globe } from "lucide-react";
 import type { Restaurant, AyceTier, PriceTier } from "@/lib/types";
 import { KBBQ_PRICE_RANGES } from "@/lib/types";
 import { isYelpConnected, slugFromUrl, kbbqConfidence, type YelpBizLite } from "@/lib/yelp-shared";
@@ -44,6 +44,7 @@ export default function RestaurantForm({ initial, token, onClose, onSaved }: Pro
   const [reviewCount, setReviewCount] = useState(initial?.review_count ?? 100);
   const [yelpUrl, setYelpUrl] = useState(initial?.yelp_url ?? "");
   const [yelpId, setYelpId] = useState(initial?.yelp_id ?? "");
+  const [website, setWebsite] = useState(initial?.website ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -146,6 +147,7 @@ export default function RestaurantForm({ initial, token, onClose, onSaved }: Pro
       lng: initial?.lng ?? -118.302,
       yelp_url: yelpUrl.trim(),
       yelp_id: yelpId.trim() || slugFromUrl(yelpUrl) || undefined,
+      website: website.trim() || undefined,
       notes: notes.trim(),
       kv_managed: true,
     };
@@ -394,6 +396,24 @@ export default function RestaurantForm({ initial, token, onClose, onSaved }: Pro
               Pasting a <code className="bg-secondary px-1 rounded">/biz/</code> URL also links it.
               {yelpMenuUrl && " Open the menu to verify prices."}
             </p>
+          </div>
+
+          {/* Website */}
+          <div>
+            <label className="text-sm font-medium block mb-1.5">
+              Website <span className="text-xs text-muted-foreground font-normal">(optional)</span>
+            </label>
+            <div className="flex gap-2">
+              <input value={website} onChange={(e) => setWebsite(e.target.value)}
+                placeholder="https://…"
+                className="flex-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+              {website.trim() && (
+                <a href={website.trim()} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs px-2.5 py-2 border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors shrink-0">
+                  <Globe className="w-3.5 h-3.5" /> Open
+                </a>
+              )}
+            </div>
           </div>
 
           {/* Ratings */}

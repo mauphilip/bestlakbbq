@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { Restaurant } from "@/lib/types";
-import { ExternalLink, ArrowUpDown } from "lucide-react";
+import { ExternalLink, ArrowUpDown, Globe } from "lucide-react";
 
 type SortKey = "cost" | "rating" | "value" | "reviews";
 
@@ -162,12 +162,17 @@ export default function RestaurantList({ restaurants }: { restaurants: Restauran
                   <div className="h-full rounded-full bg-primary/60" style={{ width: `${reviewPct * 100}%` }} />
                 </div>
               </div>
-              <div>
+              <div className="flex items-center gap-2">
+                {r.website && (
+                  <a href={r.website} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors" title="Visit website">
+                    <Globe className="w-4 h-4" />
+                  </a>
+                )}
                 {r.yelp_url ? (
                   <a href={r.yelp_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80 transition-colors" title="View on Yelp">
                     <ExternalLink className="w-4 h-4" />
                   </a>
-                ) : <span className="text-muted-foreground/30">—</span>}
+                ) : !r.website ? <span className="text-muted-foreground/30">—</span> : null}
               </div>
             </div>
           );
@@ -219,11 +224,18 @@ export default function RestaurantList({ restaurants }: { restaurants: Restauran
                   <span className="text-muted-foreground text-xs">{(r.review_count / 1000).toFixed(1)}k reviews</span>
                 </div>
               </div>
-              {r.yelp_url && (
-                <a href={r.yelp_url} target="_blank" rel="noopener noreferrer" className="text-primary shrink-0 mt-1">
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              )}
+              <div className="flex items-center gap-2 shrink-0 mt-1">
+                {r.website && (
+                  <a href={r.website} target="_blank" rel="noopener noreferrer" className="text-muted-foreground">
+                    <Globe className="w-4 h-4" />
+                  </a>
+                )}
+                {r.yelp_url && (
+                  <a href={r.yelp_url} target="_blank" rel="noopener noreferrer" className="text-primary">
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
+              </div>
             </div>
           );
         })}
