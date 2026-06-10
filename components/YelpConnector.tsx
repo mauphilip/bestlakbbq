@@ -30,18 +30,27 @@ export default function YelpConnector({ token }: { token: string }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Cache-first: show the last result without calling Yelp. Each check costs one
+  // API call from your daily quota, so we only hit Yelp when you click Refresh.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("kbbq_yelp_status");
+      if (raw) setStatus(JSON.parse(raw));
+    } catch { /* ignore */ }
+  }, []);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/yelp-status", { headers: { Authorization: `Bearer ${token}` } });
-      setStatus(await res.json());
+      const data = await res.json();
+      setStatus(data);
+      try { sessionStorage.setItem("kbbq_yelp_status", JSON.stringify(data)); } catch { /* ignore */ }
     } catch (e) {
       setStatus({ ok: false, error: String(e) });
     }
     setLoading(false);
   }, [token]);
-
-  useEffect(() => { refresh(); }, [refresh]);
 
   const remaining = status?.remaining ? parseInt(status.remaining, 10) : null;
   const limit = status?.dailyLimit ? parseInt(status.dailyLimit, 10) : null;
@@ -58,18 +67,20 @@ export default function YelpConnector({ token }: { token: string }) {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h3 className="text-sm font-semibold flex items-center gap-2"><Wifi className="w-4 h-4" /> Yelp API connection</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Live connection and remaining daily quota. Sync/Discover both draw from this.</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Remaining daily quota. Cached — checking uses 1 API call, so it only refreshes when you click below.</p>
           </div>
           <button onClick={refresh} disabled={loading}
             className="flex items-center gap-2 px-3 py-1.5 border border-border text-sm font-medium rounded-lg hover:bg-foreground/5 disabled:opacity-50 transition-colors shrink-0">
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> Refresh
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> {status ? "Refresh" : "Check now"}
           </button>
         </div>
 
         {/* Status pill */}
         <div className="flex items-center gap-2 text-sm">
-          {loading && !status ? (
+          {loading ? (
             <span className="text-muted-foreground">Checking…</span>
+          ) : !status ? (
+            <span className="text-muted-foreground">Not checked yet — click “Check now”.</span>
           ) : rateLimited ? (
             <span className="flex items-center gap-1.5 text-red-500 font-medium"><AlertTriangle className="w-4 h-4" /> Rate limited{status?.retryAfter ? ` — retry in ${status.retryAfter}s` : ""}</span>
           ) : connected ? (

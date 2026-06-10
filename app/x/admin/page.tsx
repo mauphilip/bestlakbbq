@@ -20,24 +20,22 @@ const inputCls = "bg-secondary border border-border rounded-lg px-3 py-1.5 text-
 
 function AddZipInline({ onAdd }: { onAdd: (zip: string) => void }) {
   const [zip, setZip] = useState("");
+  const valid = /^\d{5}$/.test(zip.trim());
   return (
-    <div className="flex items-center gap-2">
-      <input value={zip} onChange={(e) => setZip(e.target.value)} placeholder="Add zip"
-        maxLength={5} className={`${inputCls} font-mono w-28`} />
-      <button
-        disabled={!/^\d{5}$/.test(zip.trim())}
-        onClick={() => { onAdd(zip.trim()); setZip(""); }}
-        className="flex items-center gap-1 text-xs px-2 py-1.5 border border-border rounded-lg hover:bg-foreground/5 disabled:opacity-40 transition-colors">
-        <Plus className="w-3 h-3" /> Add
-      </button>
-    </div>
+    <span className="flex items-center gap-1">
+      <input value={zip} onChange={(e) => setZip(e.target.value)} placeholder="+ zip" maxLength={5}
+        onKeyDown={(e) => { if (e.key === "Enter" && valid) { onAdd(zip.trim()); setZip(""); } }}
+        className="bg-secondary border border-border rounded-md px-2 py-0.5 text-[11px] font-mono w-16 focus:outline-none focus:ring-1 focus:ring-primary" />
+      <button disabled={!valid} onClick={() => { onAdd(zip.trim()); setZip(""); }} title="Add zip"
+        className="text-muted-foreground hover:text-foreground disabled:opacity-30"><Plus className="w-3.5 h-3.5" /></button>
+    </span>
   );
 }
 
 function NeighborhoodCard({
-  name, zips, names, onSetZip, onRemoveZip, onRename, onDelete,
+  name, zips, onSetZip, onRemoveZip, onRename, onDelete,
 }: {
-  name: string; zips: string[]; names: string[];
+  name: string; zips: string[];
   onSetZip: (zip: string, hood: string) => void;
   onRemoveZip: (zip: string) => void;
   onRename: (from: string, to: string) => void;
@@ -46,46 +44,38 @@ function NeighborhoodCard({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
   return (
-    <div className="bg-card border border-border rounded-xl p-4">
-      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+    <div className="bg-card border border-border rounded-xl p-3">
+      <div className="flex items-center justify-between gap-2 mb-2">
         {editing ? (
-          <div className="flex items-center gap-2">
-            <input value={draft} onChange={(e) => setDraft(e.target.value)} className={inputCls} autoFocus />
-            <button onClick={() => { onRename(name, draft.trim()); setEditing(false); }}
-              className="text-xs px-2 py-1.5 bg-primary text-primary-foreground rounded-lg flex items-center gap-1">
-              <CheckCircle className="w-3 h-3" /> Save
-            </button>
-            <button onClick={() => { setDraft(name); setEditing(false); }}
-              className="text-xs px-2 py-1.5 border border-border rounded-lg text-muted-foreground">
-              Cancel
-            </button>
+          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            <input value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus
+              onKeyDown={(e) => { if (e.key === "Enter") { onRename(name, draft.trim()); setEditing(false); } }}
+              className={`${inputCls} py-1 flex-1 min-w-0`} />
+            <button onClick={() => { onRename(name, draft.trim()); setEditing(false); }} title="Save" className="text-green-500"><CheckCircle className="w-4 h-4" /></button>
+            <button onClick={() => { setDraft(name); setEditing(false); }} title="Cancel" className="text-muted-foreground"><X className="w-4 h-4" /></button>
           </div>
         ) : (
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold">{name}</h3>
-            <span className="text-xs text-muted-foreground">{zips.length}</span>
-            <button onClick={() => { setDraft(name); setEditing(true); }} title="Rename"
-              className="text-muted-foreground hover:text-foreground"><Pencil className="w-3.5 h-3.5" /></button>
-          </div>
+          <>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <h3 className="text-sm font-semibold truncate">{name}</h3>
+              <span className="text-[10px] text-muted-foreground bg-secondary rounded px-1.5 py-0.5 shrink-0">{zips.length}</span>
+              <button onClick={() => { setDraft(name); setEditing(true); }} title="Rename"
+                className="text-muted-foreground hover:text-foreground shrink-0"><Pencil className="w-3 h-3" /></button>
+            </div>
+            <button onClick={() => onDelete(name)} title="Delete neighborhood"
+              className="text-muted-foreground hover:text-red-400 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+          </>
         )}
-        <button onClick={() => onDelete(name)}
-          className="flex items-center gap-1 text-xs px-2 py-1 border border-red-500/20 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors">
-          <Trash2 className="w-3 h-3" /> Delete
-        </button>
       </div>
-      <div className="flex flex-wrap gap-1.5 mb-3">
+      <div className="flex flex-wrap gap-1 items-center">
         {zips.map((z) => (
-          <span key={z} className="flex items-center gap-1 text-xs font-mono bg-secondary border border-border rounded-lg pl-2 pr-1 py-1">
+          <span key={z} className="flex items-center gap-0.5 text-[11px] font-mono bg-secondary border border-border rounded-md pl-1.5 pr-0.5 py-0.5">
             {z}
-            <button onClick={() => onRemoveZip(z)} className="text-muted-foreground hover:text-red-400" title="Remove">
-              <X className="w-3 h-3" />
-            </button>
+            <button onClick={() => onRemoveZip(z)} className="text-muted-foreground hover:text-red-400" title="Remove"><X className="w-3 h-3" /></button>
           </span>
         ))}
-        {zips.length === 0 && <span className="text-xs text-muted-foreground">No zips</span>}
+        <AddZipInline onAdd={(z) => onSetZip(z, name)} />
       </div>
-      <AddZipInline onAdd={(z) => onSetZip(z, name)} />
-      {names.length === 0 && null}
     </div>
   );
 }
@@ -146,6 +136,7 @@ export default function AdminPage() {
   const [zipMapDirty, setZipMapDirty] = useState(false);
   const [savingMap, setSavingMap] = useState(false);
   const [nhView, setNhView] = useState<"grouped" | "flat">("grouped");
+  const [nhSort, setNhSort] = useState<"zip" | "neighborhood">("zip");
   const [selectedZips, setSelectedZips] = useState<Set<string>>(new Set());
   const [bulkNeighborhood, setBulkNeighborhood] = useState("");
 
@@ -291,7 +282,11 @@ export default function AdminPage() {
   });
 
   // Neighborhood map derived data
-  const sortedZips = Object.keys(zipMap).sort((a, b) => a.localeCompare(b));
+  const sortedZips = Object.keys(zipMap).sort((a, b) =>
+    nhSort === "neighborhood"
+      ? (zipMap[a].localeCompare(zipMap[b]) || a.localeCompare(b))
+      : a.localeCompare(b)
+  );
   const neighborhoodNames = Array.from(new Set(Object.values(zipMap))).sort((a, b) => a.localeCompare(b));
   const groups: Record<string, string[]> = {};
   for (const z of sortedZips) {
@@ -536,15 +531,10 @@ export default function AdminPage() {
         <div className="space-y-4">
           {/* Header */}
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <h2 className="text-sm font-semibold flex items-center gap-2">
-                Zip → Neighborhood map
-                {zipMapDirty && <span className="text-xs text-yellow-500 font-normal">· unsaved changes</span>}
-              </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Single source of truth. Changes take effect on the next Yelp Discover refresh.
-              </p>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Changes take effect on the next Yelp Discover refresh.
+              {zipMapDirty && <span className="text-yellow-500 ml-1">· unsaved changes</span>}
+            </p>
             <button onClick={saveZipMap} disabled={!zipMapDirty || savingMap}
               className="flex items-center gap-1.5 text-sm px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0">
               <Save className="w-4 h-4" />
@@ -576,18 +566,19 @@ export default function AdminPage() {
           {/* ── Grouped view ── */}
           {nhView === "grouped" && (
             <div className="space-y-3">
-              {groupNames.map((name) => (
-                <NeighborhoodCard
-                  key={name}
-                  name={name}
-                  zips={groups[name]}
-                  names={neighborhoodNames}
-                  onSetZip={setZip}
-                  onRemoveZip={removeZip}
-                  onRename={renameNeighborhood}
-                  onDelete={deleteNeighborhood}
-                />
-              ))}
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 items-start">
+                {groupNames.map((name) => (
+                  <NeighborhoodCard
+                    key={name}
+                    name={name}
+                    zips={groups[name]}
+                    onSetZip={setZip}
+                    onRemoveZip={removeZip}
+                    onRename={renameNeighborhood}
+                    onDelete={deleteNeighborhood}
+                  />
+                ))}
+              </div>
               <AddNeighborhoodRow onAdd={(zip, hood) => setZip(zip, hood)} />
             </div>
           )}
@@ -595,6 +586,15 @@ export default function AdminPage() {
           {/* ── Flat view ── */}
           {nhView === "flat" && (
             <div className="bg-card border border-border rounded-xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-2 border-b border-border text-xs">
+                <span className="text-muted-foreground">{sortedZips.length} zips · sort by</span>
+                {([["zip", "Zip"], ["neighborhood", "Neighborhood"]] as const).map(([k, label]) => (
+                  <button key={k} onClick={() => setNhSort(k)}
+                    className={`px-2 py-0.5 rounded-md border transition-colors ${nhSort === k ? "bg-primary/15 border-primary/40 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
               {selectedZips.size > 0 && (
                 <div className="sticky top-0 z-10 bg-secondary border-b border-border px-4 py-2 flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-medium">{selectedZips.size} selected</span>
