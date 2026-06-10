@@ -34,6 +34,8 @@ export interface Restaurant {
   lat: number;
   lng: number;
   yelp_url: string;
+  /** The restaurant's own website (manually entered — Yelp's API doesn't expose it). */
+  website?: string;
   notes: string;
   /** True if this record was added/edited via admin (stored in KV) */
   kv_managed?: boolean;

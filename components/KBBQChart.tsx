@@ -5,7 +5,7 @@ import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from "recharts";
-import { Maximize2, Minimize2, Tag, EyeOff, Search, X } from "lucide-react";
+import { Maximize2, Minimize2, Tag, EyeOff, Search, X, Globe } from "lucide-react";
 import type { Restaurant } from "@/lib/types";
 import { useTheme } from "@/components/ThemeProvider";
 
@@ -410,6 +410,12 @@ export default function KBBQChart({ restaurants }: Props) {
                 <span className="text-muted-foreground shrink-0">{d.isAyce ? "AYCE" : "Non-AYCE"}</span>
                 <span className="font-medium shrink-0">${d.y}/pp</span>
                 <span className="text-muted-foreground shrink-0">★ {d.x.toFixed(2)}</span>
+                {d.restaurant.website && (
+                  <a href={d.restaurant.website} target="_blank" rel="noopener noreferrer"
+                    className="text-muted-foreground hover:text-primary shrink-0" title="Website">
+                    <Globe className="w-3.5 h-3.5" />
+                  </a>
+                )}
                 <a href={yelpLink(d.restaurant)} target="_blank" rel="noopener noreferrer"
                   className="text-primary hover:underline shrink-0">Yelp →</a>
               </div>
