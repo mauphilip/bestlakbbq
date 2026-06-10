@@ -1,20 +1,52 @@
 import type { Metadata } from "next";
+import { KBBQ_PRICE_RANGES, type PriceTier } from "@/lib/types";
 
 export const metadata: Metadata = {
   title: "FAQ — SoCal KBBQ Chart",
   description: "Frequently asked questions about the SoCal KBBQ chart: how costs, ratings, bubble sizes, and shapes are calculated.",
 };
 
+const TIER_NOTE: Record<PriceTier, string> = {
+  "$": "budget",
+  "$$": "mid-range",
+  "$$$": "premium",
+  "$$$$": "high-end",
+};
+
 const faqs: { q: string; a: React.ReactNode }[] = [
   {
-    q: "How are costs calculated?",
+    q: "How is the cost per person calculated?",
     a: (
       <div className="space-y-2 text-sm text-muted-foreground">
         <p>
-          <strong className="text-foreground">AYCE spots:</strong> The chart plots the <em>average</em> of the menu tiers. Many spots have 2–4 tiers (e.g. Standard $29, Premium $39) — hover a bubble to see the full price range.
+          <strong className="text-foreground">AYCE spots:</strong> The chart plots the <em>average</em> of the menu tiers — sum the tier prices and divide by the number of tiers (e.g. Standard&nbsp;$27, Premium&nbsp;$35, Prime&nbsp;$43, Wagyu&nbsp;$50 → ≈ $39). Hover a bubble to see the full price range and every tier.
         </p>
         <p>
-          <strong className="text-foreground">Non-AYCE spots:</strong> Estimated cost per person based on the most expensive combo or sharing platter divided by a recommended group size (e.g. a $120 combo for 3 people = $40/pp). This is an estimate and may vary.
+          <strong className="text-foreground">Non-AYCE spots:</strong> An estimated cost per person — the most expensive combo or sharing platter divided by its recommended group size (e.g. a $120 combo for 3 = $40/pp). An estimate; it may vary.
+        </p>
+        <p>
+          Where an exact price hasn&apos;t been verified yet, we fall back to the Yelp price tier&apos;s midpoint (see the next question).
+        </p>
+      </div>
+    ),
+  },
+  {
+    q: "What do the $ / $$ / $$$ / $$$$ price tiers mean?",
+    a: (
+      <div className="space-y-2 text-sm text-muted-foreground">
+        <p>
+          When a restaurant&apos;s exact price isn&apos;t verified yet, we estimate it from Yelp&apos;s price tier, mapped to KBBQ-appropriate per-person ranges:
+        </p>
+        <ul className="space-y-1 list-none">
+          {(Object.keys(KBBQ_PRICE_RANGES) as PriceTier[]).map((t) => (
+            <li key={t}>
+              <span className="text-foreground font-medium">{t}</span> — {KBBQ_PRICE_RANGES[t].label}/pp{" "}
+              <span className="text-muted-foreground/70">({TIER_NOTE[t]})</span>
+            </li>
+          ))}
+        </ul>
+        <p className="text-muted-foreground/80">
+          These ranges are calibrated estimates and get refined over time as more exact prices are verified.
         </p>
       </div>
     ),

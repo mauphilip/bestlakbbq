@@ -10,7 +10,7 @@ See **CONTRIBUTING.md** for the full process. In every session:
 
 1. **Branch first.** Create a branch off an up-to-date `main` for the work (`feature/…`, `fix/…`, `chore/…`). Do **not** commit feature work straight to `main`.
 2. **Build before committing.** `npm run build` must compile clean; commit in logical chunks.
-3. **Merge to `main` when verified.** Merging to `main` **deploys to production** on Vercel (PRs optional). Confirm the production deploy goes green.
-4. **Tag releases.** After a body of work, update `CHANGELOG.md` and cut an annotated semver tag (`vX.Y.Z`) with Added / Changed / Fixed / Removed notes.
+3. **Merge to `main` when the feature is done.** Merging to `main` **deploys to production** on Vercel (PRs optional). Confirm the production deploy goes green. Each merged feature just adds to `[Unreleased]` in `CHANGELOG.md`.
+4. **Tag only on explicit request.** Do **not** create release tags automatically. When the maintainer explicitly asks for a release, roll all `[Unreleased]` notes (from every branch merged since the last tag) into one dated version section, then cut an annotated semver tag + GitHub release using those aggregated notes.
 
 Gotchas: `main` is the production branch (other branches only get Preview deploys). Secrets live in Vercel env vars, not `.env.local`. Never put the admin PIN in commits, notes, or docs.
