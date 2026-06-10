@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Lock, Trash2, Download, ShieldCheck, AlertTriangle, CheckCircle, Plus } from "lucide-react";
+import { Lock, Trash2, Download, ShieldCheck, AlertTriangle, CheckCircle, Plus, Save, X, Pencil } from "lucide-react";
 import type { Restaurant } from "@/lib/types";
 import { KBBQ_PRICE_RANGES } from "@/lib/types";
 import AdminSearchPanel from "@/components/AdminSearchPanel";
@@ -14,6 +14,119 @@ import { isYelpConnected } from "@/lib/yelp-shared";
 function getStoredToken() {
   if (typeof window === "undefined") return "";
   return sessionStorage.getItem("admin_token") ?? "";
+}
+
+const inputCls = "bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary";
+
+function AddZipInline({ onAdd }: { onAdd: (zip: string) => void }) {
+  const [zip, setZip] = useState("");
+  return (
+    <div className="flex items-center gap-2">
+      <input value={zip} onChange={(e) => setZip(e.target.value)} placeholder="Add zip"
+        maxLength={5} className={`${inputCls} font-mono w-28`} />
+      <button
+        disabled={!/^\d{5}$/.test(zip.trim())}
+        onClick={() => { onAdd(zip.trim()); setZip(""); }}
+        className="flex items-center gap-1 text-xs px-2 py-1.5 border border-border rounded-lg hover:bg-foreground/5 disabled:opacity-40 transition-colors">
+        <Plus className="w-3 h-3" /> Add
+      </button>
+    </div>
+  );
+}
+
+function NeighborhoodCard({
+  name, zips, names, onSetZip, onRemoveZip, onRename, onDelete,
+}: {
+  name: string; zips: string[]; names: string[];
+  onSetZip: (zip: string, hood: string) => void;
+  onRemoveZip: (zip: string) => void;
+  onRename: (from: string, to: string) => void;
+  onDelete: (name: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  return (
+    <div className="bg-card border border-border rounded-xl p-4">
+      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        {editing ? (
+          <div className="flex items-center gap-2">
+            <input value={draft} onChange={(e) => setDraft(e.target.value)} className={inputCls} autoFocus />
+            <button onClick={() => { onRename(name, draft.trim()); setEditing(false); }}
+              className="text-xs px-2 py-1.5 bg-primary text-primary-foreground rounded-lg flex items-center gap-1">
+              <CheckCircle className="w-3 h-3" /> Save
+            </button>
+            <button onClick={() => { setDraft(name); setEditing(false); }}
+              className="text-xs px-2 py-1.5 border border-border rounded-lg text-muted-foreground">
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold">{name}</h3>
+            <span className="text-xs text-muted-foreground">{zips.length}</span>
+            <button onClick={() => { setDraft(name); setEditing(true); }} title="Rename"
+              className="text-muted-foreground hover:text-foreground"><Pencil className="w-3.5 h-3.5" /></button>
+          </div>
+        )}
+        <button onClick={() => onDelete(name)}
+          className="flex items-center gap-1 text-xs px-2 py-1 border border-red-500/20 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors">
+          <Trash2 className="w-3 h-3" /> Delete
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {zips.map((z) => (
+          <span key={z} className="flex items-center gap-1 text-xs font-mono bg-secondary border border-border rounded-lg pl-2 pr-1 py-1">
+            {z}
+            <button onClick={() => onRemoveZip(z)} className="text-muted-foreground hover:text-red-400" title="Remove">
+              <X className="w-3 h-3" />
+            </button>
+          </span>
+        ))}
+        {zips.length === 0 && <span className="text-xs text-muted-foreground">No zips</span>}
+      </div>
+      <AddZipInline onAdd={(z) => onSetZip(z, name)} />
+      {names.length === 0 && null}
+    </div>
+  );
+}
+
+function AddNeighborhoodRow({ onAdd }: { onAdd: (zip: string, hood: string) => void }) {
+  const [zip, setZip] = useState("");
+  const [hood, setHood] = useState("");
+  return (
+    <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-2 flex-wrap">
+      <input value={hood} onChange={(e) => setHood(e.target.value)} placeholder="New neighborhood name"
+        className={`${inputCls} flex-1 min-w-40`} />
+      <input value={zip} onChange={(e) => setZip(e.target.value)} placeholder="First zip" maxLength={5}
+        className={`${inputCls} font-mono w-28`} />
+      <button
+        disabled={!/^\d{5}$/.test(zip.trim()) || !hood.trim()}
+        onClick={() => { onAdd(zip.trim(), hood.trim()); setZip(""); setHood(""); }}
+        className="flex items-center gap-1.5 text-sm px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0">
+        <Plus className="w-4 h-4" /> Add neighborhood
+      </button>
+    </div>
+  );
+}
+
+function AddZipFlatRow({ names, onAdd }: { names: string[]; onAdd: (zip: string, hood: string) => void }) {
+  const [zip, setZip] = useState("");
+  const [hood, setHood] = useState("");
+  return (
+    <div className="border-t border-border px-4 py-3 flex items-center gap-2 flex-wrap">
+      <input value={zip} onChange={(e) => setZip(e.target.value)} placeholder="Zip" maxLength={5}
+        className={`${inputCls} font-mono w-28`} />
+      <input value={hood} onChange={(e) => setHood(e.target.value)} placeholder="Neighborhood" list="nh-names"
+        className={`${inputCls} flex-1 min-w-36`} />
+      <datalist id="nh-names">{names.map((n) => <option key={n} value={n} />)}</datalist>
+      <button
+        disabled={!/^\d{5}$/.test(zip.trim()) || !hood.trim()}
+        onClick={() => { onAdd(zip.trim(), hood.trim()); setZip(""); setHood(""); }}
+        className="flex items-center gap-1.5 text-sm px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0">
+        <Plus className="w-4 h-4" /> Add zip
+      </button>
+    </div>
+  );
 }
 
 export default function AdminPage() {
@@ -29,19 +142,94 @@ export default function AdminPage() {
   const [manageTab, setManageTab] = useState<"list" | "sync" | "connector">("list");
   const [searchFilter, setSearchFilter] = useState("");
   const [priceFilter, setPriceFilter] = useState(false); // show only "needs price check"
-  const [zipOverrides, setZipOverrides] = useState<Record<string, string>>({});
-  const [newZip, setNewZip] = useState("");
-  const [newNeighborhood, setNewNeighborhood] = useState("");
-  const [savingZip, setSavingZip] = useState(false);
+  const [zipMap, setZipMap] = useState<Record<string, string>>({});
+  const [zipMapDirty, setZipMapDirty] = useState(false);
+  const [savingMap, setSavingMap] = useState(false);
+  const [nhView, setNhView] = useState<"grouped" | "flat">("grouped");
+  const [selectedZips, setSelectedZips] = useState<Set<string>>(new Set());
+  const [bulkNeighborhood, setBulkNeighborhood] = useState("");
 
   useEffect(() => {
     const stored = getStoredToken();
     if (stored) {
       setToken(stored);
       loadRestaurants();
-      fetch("/api/neighborhoods").then((r) => r.json()).then((d) => setZipOverrides(d.overrides ?? {})).catch(() => {});
+      fetch("/api/neighborhoods").then((r) => r.json()).then((d) => setZipMap(d.map ?? {})).catch(() => {});
     }
   }, []);
+
+  // ── Neighborhood zip-map editing (local until saved) ──
+  function setZip(zip: string, neighborhood: string) {
+    setZipMap((m) => ({ ...m, [zip]: neighborhood }));
+    setZipMapDirty(true);
+  }
+  function removeZip(zip: string) {
+    setZipMap((m) => {
+      const next = { ...m };
+      delete next[zip];
+      return next;
+    });
+    setSelectedZips((s) => {
+      if (!s.has(zip)) return s;
+      const next = new Set(s);
+      next.delete(zip);
+      return next;
+    });
+    setZipMapDirty(true);
+  }
+  function renameNeighborhood(from: string, to: string) {
+    if (!to.trim() || from === to) return;
+    setZipMap((m) => {
+      const next: Record<string, string> = {};
+      for (const [z, h] of Object.entries(m)) next[z] = h === from ? to : h;
+      return next;
+    });
+    setZipMapDirty(true);
+  }
+  function deleteNeighborhood(name: string) {
+    setZipMap((m) => {
+      const next: Record<string, string> = {};
+      for (const [z, h] of Object.entries(m)) if (h !== name) next[z] = h;
+      return next;
+    });
+    setZipMapDirty(true);
+  }
+  function bulkAssign(neighborhood: string) {
+    if (!neighborhood.trim()) return;
+    setZipMap((m) => {
+      const next = { ...m };
+      for (const z of selectedZips) next[z] = neighborhood;
+      return next;
+    });
+    setSelectedZips(new Set());
+    setZipMapDirty(true);
+  }
+  function bulkDelete() {
+    setZipMap((m) => {
+      const next = { ...m };
+      for (const z of selectedZips) delete next[z];
+      return next;
+    });
+    setSelectedZips(new Set());
+    setZipMapDirty(true);
+  }
+  async function saveZipMap() {
+    setSavingMap(true);
+    try {
+      const res = await fetch("/api/neighborhoods", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ map: zipMap }),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        if (d.map) setZipMap(d.map);
+        setZipMapDirty(false);
+      }
+    } finally {
+      setSavingMap(false);
+    }
+  }
 
   async function login() {
     setLoggingIn(true);
@@ -93,27 +281,6 @@ export default function AdminPage() {
     URL.revokeObjectURL(url);
   }
 
-  async function saveZipOverride(zip: string, neighborhood: string) {
-    const updated = { ...zipOverrides, [zip]: neighborhood };
-    await fetch("/api/neighborhoods", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ overrides: updated }),
-    });
-    setZipOverrides(updated);
-  }
-
-  async function deleteZipOverride(zip: string) {
-    const updated = { ...zipOverrides };
-    delete updated[zip];
-    await fetch("/api/neighborhoods", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ overrides: updated }),
-    });
-    setZipOverrides(updated);
-  }
-
   const unverifiedCount = restaurants.filter((r) => !r.price_verified).length;
 
   const filtered = restaurants.filter((r) => {
@@ -122,6 +289,16 @@ export default function AdminPage() {
     const q = searchFilter.toLowerCase();
     return r.name.toLowerCase().includes(q) || r.neighborhood.toLowerCase().includes(q);
   });
+
+  // Neighborhood map derived data
+  const sortedZips = Object.keys(zipMap).sort((a, b) => a.localeCompare(b));
+  const neighborhoodNames = Array.from(new Set(Object.values(zipMap))).sort((a, b) => a.localeCompare(b));
+  const groups: Record<string, string[]> = {};
+  for (const z of sortedZips) {
+    const h = zipMap[z];
+    (groups[h] ??= []).push(z);
+  }
+  const groupNames = Object.keys(groups).sort((a, b) => a.localeCompare(b));
 
   // ── Login screen ──────────────────────────────────────────────────────────
   if (!token) {
@@ -356,36 +533,116 @@ export default function AdminPage() {
 
       {/* ── Neighborhoods tab ── */}
       {activeTab === "neighborhoods" && (
-        <div className="space-y-6">
-          <p className="text-sm text-muted-foreground">
-            These overrides are merged on top of the built-in zip→neighborhood map used by Yelp Discover. Changes take effect on the next Yelp Discover refresh.
-          </p>
-
-          {/* Current overrides */}
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Current Overrides</h3>
-              <span className="text-xs text-muted-foreground">{Object.keys(zipOverrides).length} entries</span>
+        <div className="space-y-4">
+          {/* Header */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-sm font-semibold flex items-center gap-2">
+                Zip → Neighborhood map
+                {zipMapDirty && <span className="text-xs text-yellow-500 font-normal">· unsaved changes</span>}
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Single source of truth. Changes take effect on the next Yelp Discover refresh.
+              </p>
             </div>
-            {Object.keys(zipOverrides).length === 0 ? (
-              <p className="px-4 py-4 text-sm text-muted-foreground">No overrides set.</p>
-            ) : (
+            <button onClick={saveZipMap} disabled={!zipMapDirty || savingMap}
+              className="flex items-center gap-1.5 text-sm px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0">
+              <Save className="w-4 h-4" />
+              {savingMap ? "Saving…" : zipMapDirty ? "Save changes" : "Saved"}
+            </button>
+          </div>
+
+          {/* View toggle */}
+          <div className="flex gap-1 p-1 bg-secondary/50 rounded-lg w-fit">
+            {([
+              { key: "grouped", label: "Grouped" },
+              { key: "flat", label: "Flat list" },
+            ] as const).map(({ key, label }) => (
+              <button key={key} onClick={() => setNhView(key)}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  nhView === key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {sortedZips.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-8 bg-card border border-border rounded-xl">
+              The map is empty. Add a neighborhood below to get started.
+            </p>
+          )}
+
+          {/* ── Grouped view ── */}
+          {nhView === "grouped" && (
+            <div className="space-y-3">
+              {groupNames.map((name) => (
+                <NeighborhoodCard
+                  key={name}
+                  name={name}
+                  zips={groups[name]}
+                  names={neighborhoodNames}
+                  onSetZip={setZip}
+                  onRemoveZip={removeZip}
+                  onRename={renameNeighborhood}
+                  onDelete={deleteNeighborhood}
+                />
+              ))}
+              <AddNeighborhoodRow onAdd={(zip, hood) => setZip(zip, hood)} />
+            </div>
+          )}
+
+          {/* ── Flat view ── */}
+          {nhView === "flat" && (
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+              {selectedZips.size > 0 && (
+                <div className="sticky top-0 z-10 bg-secondary border-b border-border px-4 py-2 flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium">{selectedZips.size} selected</span>
+                  <input value={bulkNeighborhood} onChange={(e) => setBulkNeighborhood(e.target.value)}
+                    placeholder="Neighborhood" list="nh-names" className={`${inputCls} flex-1 min-w-36`} />
+                  <button disabled={!bulkNeighborhood.trim()}
+                    onClick={() => { bulkAssign(bulkNeighborhood.trim()); setBulkNeighborhood(""); }}
+                    className="text-xs px-3 py-1.5 bg-primary text-primary-foreground rounded-lg disabled:opacity-50">
+                    Assign
+                  </button>
+                  <button onClick={bulkDelete}
+                    className="flex items-center gap-1 text-xs px-3 py-1.5 border border-red-500/20 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors">
+                    <Trash2 className="w-3 h-3" /> Delete selected
+                  </button>
+                </div>
+              )}
+              <datalist id="nh-names">{neighborhoodNames.map((n) => <option key={n} value={n} />)}</datalist>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-xs text-muted-foreground">
+                    <th className="px-4 py-2 w-8">
+                      <input type="checkbox"
+                        checked={sortedZips.length > 0 && selectedZips.size === sortedZips.length}
+                        onChange={(e) => setSelectedZips(e.target.checked ? new Set(sortedZips) : new Set())} />
+                    </th>
                     <th className="text-left px-4 py-2">Zip</th>
                     <th className="text-left px-4 py-2">Neighborhood</th>
                     <th className="px-4 py-2" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
-                  {Object.entries(zipOverrides).sort(([a], [b]) => a.localeCompare(b)).map(([zip, hood]) => (
+                  {sortedZips.map((zip) => (
                     <tr key={zip} className="hover:bg-foreground/[0.02]">
+                      <td className="px-4 py-2">
+                        <input type="checkbox" checked={selectedZips.has(zip)}
+                          onChange={(e) => setSelectedZips((s) => {
+                            const next = new Set(s);
+                            if (e.target.checked) next.add(zip); else next.delete(zip);
+                            return next;
+                          })} />
+                      </td>
                       <td className="px-4 py-2 font-mono text-xs">{zip}</td>
-                      <td className="px-4 py-2">{hood}</td>
+                      <td className="px-4 py-2">
+                        <input value={zipMap[zip]} onChange={(e) => setZip(zip, e.target.value)}
+                          list="nh-names" className={`${inputCls} w-full`} />
+                      </td>
                       <td className="px-4 py-2 text-right">
-                        <button
-                          onClick={() => deleteZipOverride(zip)}
+                        <button onClick={() => removeZip(zip)}
                           className="text-xs px-2 py-1 border border-red-500/20 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-1 ml-auto">
                           <Trash2 className="w-3 h-3" /> Remove
                         </button>
@@ -394,83 +651,9 @@ export default function AdminPage() {
                   ))}
                 </tbody>
               </table>
-            )}
-            {/* Add row */}
-            <div className="border-t border-border px-4 py-3 flex items-center gap-2 flex-wrap">
-              <input
-                value={newZip}
-                onChange={(e) => setNewZip(e.target.value)}
-                placeholder="Zip code (e.g. 90010)"
-                maxLength={10}
-                className="bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm font-mono w-44 focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-              <input
-                value={newNeighborhood}
-                onChange={(e) => setNewNeighborhood(e.target.value)}
-                placeholder="Neighborhood label"
-                className="bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm flex-1 min-w-36 focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-              <button
-                disabled={savingZip || !newZip.trim() || !newNeighborhood.trim()}
-                onClick={async () => {
-                  setSavingZip(true);
-                  await saveZipOverride(newZip.trim(), newNeighborhood.trim());
-                  setNewZip("");
-                  setNewNeighborhood("");
-                  setSavingZip(false);
-                }}
-                className="flex items-center gap-1.5 text-sm px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0">
-                <Plus className="w-4 h-4" />{savingZip ? "Saving…" : "Add"}
-              </button>
+              <AddZipFlatRow names={neighborhoodNames} onAdd={(zip, hood) => setZip(zip, hood)} />
             </div>
-          </div>
-
-          {/* Built-in map reference */}
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-border">
-              <h3 className="text-sm font-semibold">Built-in Zip Map (read-only reference)</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">Overrides above take priority over these entries.</p>
-            </div>
-            <div className="overflow-auto max-h-72">
-              <table className="w-full text-xs">
-                <thead className="sticky top-0 bg-card">
-                  <tr className="border-b border-border text-muted-foreground">
-                    <th className="text-left px-4 py-2">Zip</th>
-                    <th className="text-left px-4 py-2">Neighborhood</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/50">
-                  {[
-                    ["90004","Koreatown"],["90005","Koreatown"],["90006","Koreatown"],
-                    ["90010","Koreatown"],["90019","Koreatown"],["90020","Koreatown"],
-                    ["90036","Mid-Wilshire"],
-                    ["90247","Gardena"],["90248","Gardena"],["90249","Gardena"],
-                    ["90501","Torrance"],["90502","Torrance"],["90503","Torrance"],
-                    ["90504","Torrance"],["90505","Torrance"],["90506","Torrance"],
-                    ["91401","Van Nuys"],["91402","Van Nuys"],["91405","Van Nuys"],
-                    ["91406","Van Nuys"],["91411","Van Nuys"],["91423","Van Nuys"],
-                    ["91201","Glendale"],["91202","Glendale"],["91203","Glendale"],
-                    ["91204","Glendale"],["91205","Glendale"],["91206","Glendale"],
-                    ["91748","Rowland Heights"],["91789","Rowland Heights"],
-                    ["91801","Alhambra"],["91803","Alhambra"],
-                    ["91754","SGV"],["91755","SGV"],["91770","SGV"],
-                    ["92612","Irvine"],["92614","Irvine"],["92617","Irvine"],
-                    ["92618","Irvine"],["92620","Irvine"],["92604","Irvine"],
-                    ["90620","Buena Park"],["90621","Buena Park"],
-                    ["92801","Anaheim"],["92802","Anaheim"],["92804","Anaheim"],
-                    ["90701","Cerritos"],["90703","Cerritos"],
-                    ["92833","Fullerton"],["92835","Fullerton"],
-                    ["92868","Orange County"],["92865","Orange County"],
-                  ].map(([zip, hood]) => (
-                    <tr key={zip} className="hover:bg-foreground/[0.02]">
-                      <td className="px-4 py-1.5 font-mono text-muted-foreground">{zip}</td>
-                      <td className="px-4 py-1.5 text-muted-foreground/80">{hood}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          )}
         </div>
       )}
 

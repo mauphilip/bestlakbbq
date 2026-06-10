@@ -7,6 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 
 ### Added
 - **Yelp Connector subtab** (Manage → Yelp Connector) — shows live connection status and remaining daily Yelp API quota (a colored bar, reset time, low-quota warning), so you can see where you stand before a big Sync/Discover.
+- **Editable neighborhood ↔ zip map** (Neighborhoods tab) — the whole zip→neighborhood map now lives in the database as one editable source of truth (replacing the hardcoded map + overrides). Two views (grouped by neighborhood, and a flat zip list), full CRUD, and multi-select bulk assign/delete (e.g. assign several zips to Koreatown at once). Yelp Discover classifies neighborhoods from this map.
 
 ### Changed
 - **Unified "Sync from Yelp"** — the separate "Check Closed" and "Sync Updates" tools are now one pass. It surfaces data updates to apply (bulk, multi-select), Yelp-confirmed closures to remove (per-row Delete, **never auto-selected**), and broken links to fix. Also fixes stale cached counts lingering between the two old tools.
