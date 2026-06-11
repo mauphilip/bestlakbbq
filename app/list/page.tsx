@@ -1,21 +1,20 @@
 import RestaurantList from "@/components/RestaurantList";
-import { getAllRestaurants } from "@/lib/getRestaurants";
-import type { Restaurant } from "@/lib/types";
+import { getPartitionedRestaurants } from "@/lib/getRestaurants";
 
 export default async function ListPage() {
-  const restaurants: Restaurant[] = await getAllRestaurants();
+  const { main, risky, settings } = await getPartitionedRestaurants();
   return (
     <div className="min-h-screen pt-24 pb-16 px-6 max-w-6xl mx-auto">
       <div className="mb-10">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/8 bg-white/4 text-muted-foreground text-xs font-medium mb-4 tracking-wide uppercase">
-          {restaurants.length} Restaurants
+          {main.length} Restaurants
         </div>
         <h1 className="text-4xl font-bold tracking-tight mb-3">Directory</h1>
         <p className="text-muted-foreground">
           Sort by cost, rating, or value score. Value = rating ÷ cost × 100.
         </p>
       </div>
-      <RestaurantList restaurants={restaurants} />
+      <RestaurantList restaurants={main} risky={risky} minRating={settings.min_rating} />
     </div>
   );
 }

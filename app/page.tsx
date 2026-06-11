@@ -1,10 +1,12 @@
 import KBBQChartWrapper from "@/components/KBBQChartWrapper";
 import AboutCard from "@/components/AboutCard";
-import { getAllRestaurants } from "@/lib/getRestaurants";
+import { getPartitionedRestaurants } from "@/lib/getRestaurants";
 import type { Restaurant } from "@/lib/types";
 
 export default async function Home() {
-  const restaurants: Restaurant[] = await getAllRestaurants();
+  // Chart and stats show only spots above the quality threshold —
+  // sub-threshold imports live in the /list "Go at your own risk" section.
+  const { main: restaurants }: { main: Restaurant[] } = await getPartitionedRestaurants();
   const ayceCount = restaurants.filter(r => r.ayce).length;
   const nonAyceCount = restaurants.length - ayceCount;
   const minPrice = Math.min(...restaurants.map(r =>

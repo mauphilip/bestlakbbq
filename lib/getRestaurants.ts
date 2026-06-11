@@ -1,6 +1,7 @@
 import { getKVRestaurants } from "@/lib/kv";
 import baseRestaurants from "@/data/restaurants.json";
 import type { Restaurant } from "@/lib/types";
+import { getSettings, isRisky, type SiteSettings } from "@/lib/settings";
 
 /**
  * Returns the live merged restaurant list: base JSON + KV overrides/additions.
@@ -33,4 +34,21 @@ export async function getAllRestaurants(): Promise<Restaurant[]> {
   const kvOnly = kvRestaurants.filter((r) => !baseIds.has(r.id));
 
   return [...baseOnly, ...baseWithKvOverrides, ...kvOnly].filter((r) => !r.is_deleted);
+}
+
+/**
+ * Merged restaurant list split by the admin-editable quality thresholds.
+ * `main` = at or above the bar (or featured); `risky` = the "Go at your own risk" list.
+ * Nothing is ever deleted by thresholds — risky spots just render demoted.
+ */
+export async function getPartitionedRestaurants(): Promise<{
+  main: Restaurant[];
+  risky: Restaurant[];
+  settings: SiteSettings;
+}> {
+  const [all, settings] = await Promise.all([getAllRestaurants(), getSettings()]);
+  const main: Restaurant[] = [];
+  const risky: Restaurant[] = [];
+  for (const r of all) (isRisky(r, settings) ? risky : main).push(r);
+  return { main, risky, settings };
 }

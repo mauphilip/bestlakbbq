@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, Plus, Trash2, ExternalLink, CheckCircle, AlertTriangle, Link2, Search, Globe, RefreshCw } from "lucide-react";
+import { X, Plus, Trash2, ExternalLink, CheckCircle, AlertTriangle, Link2, Search, Globe, RefreshCw, Star } from "lucide-react";
 import type { Restaurant, AyceTier, PriceTier } from "@/lib/types";
 import { KBBQ_PRICE_RANGES } from "@/lib/types";
 import { isYelpConnected, slugFromUrl, kbbqConfidence, type YelpBizLite } from "@/lib/yelp-shared";
@@ -47,6 +47,8 @@ export default function RestaurantForm({ initial, token, onClose, onSaved, onDel
   const [yelpId, setYelpId] = useState(initial?.yelp_id ?? "");
   const [website, setWebsite] = useState(initial?.website ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
+  const [featured, setFeatured] = useState(initial?.featured ?? false);
+  const [needsReview, setNeedsReview] = useState(initial?.needs_review ?? false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -173,6 +175,8 @@ export default function RestaurantForm({ initial, token, onClose, onSaved, onDel
       yelp_id: yelpId.trim() || slugFromUrl(yelpUrl) || undefined,
       website: website.trim() || undefined,
       notes: notes.trim(),
+      featured,
+      needs_review: needsReview,
       kv_managed: true,
     };
 
@@ -245,12 +249,12 @@ export default function RestaurantForm({ initial, token, onClose, onSaved, onDel
               className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
           </div>
 
-          {/* Neighborhood */}
+          {/* Neighborhood — include the record's current value so imported areas aren't lost */}
           <div>
             <label className="text-sm font-medium block mb-1.5">Neighborhood</label>
             <select value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)}
               className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
-              {NEIGHBORHOODS.map((n) => <option key={n}>{n}</option>)}
+              {Array.from(new Set([...NEIGHBORHOODS, neighborhood].filter(Boolean))).map((n) => <option key={n}>{n}</option>)}
             </select>
           </div>
 
@@ -482,6 +486,30 @@ export default function RestaurantForm({ initial, token, onClose, onSaved, onDel
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
               placeholder="Anything notable…"
               className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none" />
+          </div>
+
+          {/* Flags */}
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer group" onClick={() => setFeatured((v) => !v)}>
+              <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                featured ? "bg-yellow-500 border-yellow-500" : "border-border group-hover:border-yellow-500/50"
+              }`}>
+                {featured && <Star className="w-3 h-3 text-white fill-white" />}
+              </div>
+              <span className="text-xs text-muted-foreground">
+                Favorite — always on the main list, even below the quality threshold
+              </span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer group" onClick={() => setNeedsReview((v) => !v)}>
+              <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                needsReview ? "bg-orange-500 border-orange-500" : "border-border group-hover:border-orange-500/50"
+              }`}>
+                {needsReview && <AlertTriangle className="w-3 h-3 text-white" />}
+              </div>
+              <span className="text-xs text-muted-foreground">
+                Needs review — imported from Yelp, AYCE status/pricing not yet triaged
+              </span>
+            </label>
           </div>
         </div>
 

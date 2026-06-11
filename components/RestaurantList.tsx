@@ -3,14 +3,12 @@
 import { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { Restaurant } from "@/lib/types";
-import { ExternalLink, ArrowUpDown, Globe } from "lucide-react";
+import { ExternalLink, ArrowUpDown, Globe, AlertTriangle, ChevronDown, ChevronUp, Star } from "lucide-react";
 
 type SortKey = "cost" | "rating" | "value" | "reviews";
 
-const NEIGHBORHOODS = ["All", "Koreatown", "Mid-Wilshire", "Orange County", "SGV", "Gardena", "Glendale", "Torrance", "Rowland Heights", "Van Nuys"];
-
 function getMinCost(r: Restaurant): number {
-  if (r.ayce) return Math.min(...r.ayce_tiers.map((t) => t.price));
+  if (r.ayce && r.ayce_tiers.length) return Math.min(...r.ayce_tiers.map((t) => t.price));
   return r.non_ayce_est_per_person ?? 0;
 }
 
@@ -24,36 +22,64 @@ function getValueScore(r: Restaurant): number {
   return getAvgRating(r) / cost * 100;
 }
 
-export default function RestaurantList({ restaurants }: { restaurants: Restaurant[] }) {
+interface Props {
+  restaurants: Restaurant[];
+  /** Spots below the quality threshold — rendered in a collapsed "Go at your own risk" section. */
+  risky?: Restaurant[];
+  /** The active rating threshold, shown in the risky section header. */
+  minRating?: number;
+}
+
+export default function RestaurantList({ restaurants, risky = [], minRating }: Props) {
   const [filter, setFilter] = useState<"all" | "ayce" | "non-ayce">("all");
   const [neighborhood, setNeighborhood] = useState("All");
   const [sort, setSort] = useState<SortKey>("value");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [riskyOpen, setRiskyOpen] = useState(false);
 
   function toggleSort(key: SortKey) {
     if (sort === key) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSort(key); setSortDir("desc"); }
   }
 
-  const sorted = useMemo(() => {
-    const filtered = restaurants.filter((r) => {
-      if (filter === "ayce" && !r.ayce) return false;
-      if (filter === "non-ayce" && r.ayce) return false;
-      if (neighborhood !== "All" && r.neighborhood !== neighborhood) return false;
-      return true;
-    });
+  // Neighborhood options derived from the data (imports add new areas over time)
+  const neighborhoods = useMemo(
+    () => ["All", ...Array.from(new Set([...restaurants, ...risky].map((r) => r.neighborhood))).sort()],
+    [restaurants, risky]
+  );
 
-    return filtered.sort((a, b) => {
-      let av = 0, bv = 0;
-      if (sort === "cost") { av = getMinCost(a); bv = getMinCost(b); }
-      if (sort === "rating") { av = getAvgRating(a); bv = getAvgRating(b); }
-      if (sort === "value") { av = getValueScore(a); bv = getValueScore(b); }
-      if (sort === "reviews") { av = a.review_count; bv = b.review_count; }
-      return sortDir === "asc" ? av - bv : bv - av;
-    });
-  }, [restaurants, filter, neighborhood, sort, sortDir]);
+  const applyFilters = (list: Restaurant[]) => list.filter((r) => {
+    if (filter === "ayce" && !r.ayce) return false;
+    if (filter === "non-ayce" && r.ayce) return false;
+    if (neighborhood !== "All" && r.neighborhood !== neighborhood) return false;
+    return true;
+  });
 
-  const maxReviews = Math.max(...restaurants.map((r) => r.review_count));
+  const applySort = (list: Restaurant[]) => [...list].sort((a, b) => {
+    let av = 0, bv = 0;
+    if (sort === "cost") { av = getMinCost(a); bv = getMinCost(b); }
+    if (sort === "rating") { av = getAvgRating(a); bv = getAvgRating(b); }
+    if (sort === "value") { av = getValueScore(a); bv = getValueScore(b); }
+    if (sort === "reviews") { av = a.review_count; bv = b.review_count; }
+    return sortDir === "asc" ? av - bv : bv - av;
+  });
+
+  const sorted = useMemo(() => applySort(applyFilters(restaurants)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [restaurants, filter, neighborhood, sort, sortDir]);
+
+  const sortedRisky = useMemo(() => applySort(applyFilters(risky)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [risky, filter, neighborhood, sort, sortDir]);
+
+  const maxReviews = useMemo(
+    () => Math.max(1, ...restaurants.map((r) => r.review_count)),
+    [restaurants]
+  );
+  const maxValueScore = useMemo(
+    () => Math.max(0.001, ...restaurants.map(getValueScore)),
+    [restaurants]
+  );
 
   function SortButton({ label, k }: { label: string; k: SortKey }) {
     return (
@@ -93,7 +119,7 @@ export default function RestaurantList({ restaurants }: { restaurants: Restauran
           onChange={(e) => setNeighborhood(e.target.value)}
           className="text-sm bg-card border border-border rounded-lg px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-auto"
         >
-          {NEIGHBORHOODS.map((n) => (
+          {neighborhoods.map((n) => (
             <option key={n} value={n}>{n === "All" ? "All Neighborhoods" : n}</option>
           ))}
         </select>
@@ -113,10 +139,9 @@ export default function RestaurantList({ restaurants }: { restaurants: Restauran
 
         {sorted.map((r, i) => {
           const minCost = getMinCost(r);
-          const maxCost = r.ayce ? Math.max(...r.ayce_tiers.map((t) => t.price)) : null;
+          const maxCost = r.ayce && r.ayce_tiers.length ? Math.max(...r.ayce_tiers.map((t) => t.price)) : null;
           const avgRating = getAvgRating(r);
           const valueScore = getValueScore(r);
-          const maxValueScore = Math.max(...restaurants.map(getValueScore));
           const isValuePick = valueScore > maxValueScore * 0.75 && minCost <= 40;
           const reviewPct = r.review_count / maxReviews;
 
@@ -130,6 +155,9 @@ export default function RestaurantList({ restaurants }: { restaurants: Restauran
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-medium text-sm">{r.name}</span>
+                  {r.featured && (
+                    <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" aria-label="Favorite" />
+                  )}
                   {isValuePick && (
                     <Badge className="bg-green-500/15 text-green-600 dark:text-green-400 border-green-500/20 text-xs h-4 px-1.5">
                       Value Pick
@@ -153,7 +181,7 @@ export default function RestaurantList({ restaurants }: { restaurants: Restauran
               <div className="w-16">
                 <div className="text-xs text-muted-foreground mb-1 text-right">{valueScore.toFixed(1)}</div>
                 <div className="h-1.5 rounded-full bg-border overflow-hidden">
-                  <div className="h-full rounded-full bg-primary" style={{ width: `${(valueScore / Math.max(...restaurants.map(getValueScore))) * 100}%` }} />
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${(valueScore / maxValueScore) * 100}%` }} />
                 </div>
               </div>
               <div className="w-14">
@@ -197,16 +225,19 @@ export default function RestaurantList({ restaurants }: { restaurants: Restauran
 
         {sorted.map((r) => {
           const minCost = getMinCost(r);
-          const maxCost = r.ayce ? Math.max(...r.ayce_tiers.map((t) => t.price)) : null;
+          const maxCost = r.ayce && r.ayce_tiers.length ? Math.max(...r.ayce_tiers.map((t) => t.price)) : null;
           const avgRating = getAvgRating(r);
           const valueScore = getValueScore(r);
-          const isValuePick = valueScore > Math.max(...restaurants.map(getValueScore)) * 0.75 && minCost < 35;
+          const isValuePick = valueScore > maxValueScore * 0.75 && minCost < 35;
 
           return (
             <div key={r.id} className="rounded-xl border border-border bg-card p-4 flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <span className="font-semibold text-sm">{r.name}</span>
+                  {r.featured && (
+                    <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" aria-label="Favorite" />
+                  )}
                   {isValuePick && (
                     <Badge className="bg-green-500/15 text-green-600 dark:text-green-400 border-green-500/20 text-xs h-4 px-1.5">
                       Value Pick
@@ -240,6 +271,53 @@ export default function RestaurantList({ restaurants }: { restaurants: Restauran
           );
         })}
       </div>
+
+      {/* ── "Go at your own risk" section ── */}
+      {risky.length > 0 && (
+        <div className="rounded-xl border border-yellow-500/25 overflow-hidden mt-6">
+          <button
+            onClick={() => setRiskyOpen((v) => !v)}
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-yellow-500/5 hover:bg-yellow-500/10 transition-colors text-left"
+          >
+            <span className="flex items-center gap-2 text-sm font-medium text-yellow-600 dark:text-yellow-400">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              Go at your own risk ({sortedRisky.length})
+              <span className="text-xs font-normal text-muted-foreground hidden sm:inline">
+                — below {minRating !== undefined ? `the ${minRating.toFixed(1)}★` : "the"} quality threshold
+              </span>
+            </span>
+            {riskyOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />}
+          </button>
+          {riskyOpen && (
+            <div className="divide-y divide-border/50 border-t border-yellow-500/15">
+              {sortedRisky.map((r) => {
+                const minCost = getMinCost(r);
+                return (
+                  <div key={r.id} className="flex items-center gap-3 px-4 py-2.5 bg-card/50">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium">{r.name}</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {r.neighborhood} · {r.ayce ? "AYCE" : "Non-AYCE"}
+                        {minCost > 0 && <> · ${minCost}{!r.ayce && " est."}</>}
+                      </p>
+                    </div>
+                    <span className="text-sm text-yellow-600 dark:text-yellow-400 font-medium shrink-0">⭐ {r.yelp_rating.toFixed(1)}</span>
+                    <span className="text-xs text-muted-foreground shrink-0">{(r.review_count / 1000).toFixed(1)}k</span>
+                    {r.yelp_url && (
+                      <a href={r.yelp_url} target="_blank" rel="noopener noreferrer" className="text-primary shrink-0">
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+              {sortedRisky.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">None match the current filters.</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Lock, Trash2, Download, ShieldCheck, AlertTriangle, CheckCircle, Plus, Save, X, Pencil } from "lucide-react";
+import { Lock, Trash2, Download, ShieldCheck, AlertTriangle, CheckCircle, Plus, Save, X, Pencil, Star } from "lucide-react";
 import type { Restaurant } from "@/lib/types";
 import { KBBQ_PRICE_RANGES } from "@/lib/types";
 import AdminSearchPanel from "@/components/AdminSearchPanel";
@@ -9,6 +9,7 @@ import RestaurantForm from "@/components/RestaurantForm";
 import DiscoverPanel from "@/components/DiscoverPanel";
 import ManageSyncTools from "@/components/ManageSyncTools";
 import YelpConnector from "@/components/YelpConnector";
+import SettingsPanel from "@/components/SettingsPanel";
 import { isYelpConnected } from "@/lib/yelp-shared";
 
 function getStoredToken() {
@@ -128,10 +129,11 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [editTarget, setEditTarget] = useState<Restaurant | null>(null);
   const [addNew, setAddNew] = useState(false);
-  const [activeTab, setActiveTab] = useState<"search" | "manage" | "neighborhoods">("manage");
+  const [activeTab, setActiveTab] = useState<"search" | "manage" | "neighborhoods" | "settings">("manage");
   const [manageTab, setManageTab] = useState<"list" | "sync" | "connector">("list");
   const [searchFilter, setSearchFilter] = useState("");
   const [priceFilter, setPriceFilter] = useState(false); // show only "needs price check"
+  const [reviewFilter, setReviewFilter] = useState(false); // show only "needs review" (fresh imports)
   const [zipMap, setZipMap] = useState<Record<string, string>>({});
   const [zipMapDirty, setZipMapDirty] = useState(false);
   const [savingMap, setSavingMap] = useState(false);
@@ -273,9 +275,11 @@ export default function AdminPage() {
   }
 
   const unverifiedCount = restaurants.filter((r) => !r.price_verified).length;
+  const needsReviewCount = restaurants.filter((r) => r.needs_review).length;
 
   const filtered = restaurants.filter((r) => {
     if (priceFilter && r.price_verified) return false;
+    if (reviewFilter && !r.needs_review) return false;
     if (!searchFilter) return true;
     const q = searchFilter.toLowerCase();
     return r.name.toLowerCase().includes(q) || r.neighborhood.toLowerCase().includes(q);
@@ -358,6 +362,7 @@ export default function AdminPage() {
           { key: "manage", label: "Manage" },
           { key: "search", label: "Search & Add" },
           { key: "neighborhoods", label: "Neighborhoods" },
+          { key: "settings", label: "Settings" },
         ] as const).map(({ key, label }) => (
           <button key={key} onClick={() => setActiveTab(key)}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
@@ -415,6 +420,12 @@ export default function AdminPage() {
               }`} title="Show only restaurants whose price hasn't been manually verified">
               <AlertTriangle className="w-4 h-4" /> Needs price check{unverifiedCount > 0 ? ` (${unverifiedCount})` : ""}
             </button>
+            <button onClick={() => setReviewFilter((v) => !v)}
+              className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border transition-colors shrink-0 ${
+                reviewFilter ? "bg-orange-500/15 border-orange-500/40 text-orange-600 dark:text-orange-400" : "border-border text-muted-foreground hover:text-foreground"
+              }`} title="Show only freshly imported restaurants that haven't been triaged (AYCE status, exact pricing)">
+              <AlertTriangle className="w-4 h-4" /> Needs review{needsReviewCount > 0 ? ` (${needsReviewCount})` : ""}
+            </button>
             <button onClick={() => setAddNew(true)}
               className="flex items-center gap-1.5 text-sm px-3 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors shrink-0">
               <Plus className="w-4 h-4" /> Add New
@@ -449,6 +460,12 @@ export default function AdminPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium truncate">{r.name}</span>
+                        {r.featured && (
+                          <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500 shrink-0" aria-label="Favorite" />
+                        )}
+                        {r.needs_review && (
+                          <span className="text-xs px-1.5 py-0.5 bg-orange-500/10 text-orange-500 rounded border border-orange-500/20 shrink-0">needs review</span>
+                        )}
                         {isYelpConnected(r) ? (
                           <span className="text-xs px-1.5 py-0.5 bg-green-500/10 text-green-500 rounded border border-green-500/20 shrink-0">Yelp ✓</span>
                         ) : (
@@ -522,6 +539,11 @@ export default function AdminPage() {
             />
           </section>
         </div>
+      )}
+
+      {/* ── Settings tab ── */}
+      {activeTab === "settings" && (
+        <SettingsPanel token={token} restaurants={restaurants} />
       )}
 
       {/* ── Neighborhoods tab ── */}
