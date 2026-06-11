@@ -239,7 +239,7 @@ export default function AdminPage() {
       setToken(t);
       loadRestaurants();
     } else {
-      setLoginError("Wrong PIN. Try again.");
+      setLoginError(res.status === 429 ? "Too many attempts — wait 15 minutes and try again." : "Wrong PIN. Try again.");
     }
   }
 
@@ -313,8 +313,8 @@ export default function AdminPage() {
           </div>
           <input type="password" value={pin} onChange={(e) => setPin(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && login()}
-            placeholder="PIN" maxLength={8}
-            className="w-full bg-secondary border border-border rounded-lg px-4 py-3 text-center text-2xl tracking-[0.5em] focus:outline-none focus:ring-1 focus:ring-primary mb-3" />
+            placeholder="PIN or passphrase" maxLength={128}
+            className="w-full bg-secondary border border-border rounded-lg px-4 py-3 text-center text-lg focus:outline-none focus:ring-1 focus:ring-primary mb-3" />
           {loginError && <p className="text-xs text-red-400 text-center mb-3">{loginError}</p>}
           <button onClick={login} disabled={loggingIn || !pin}
             className="w-full py-2.5 bg-primary text-primary-foreground font-medium rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50">

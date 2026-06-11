@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyAdminToken } from "@/lib/auth";
 
 const YELP_BASE = "https://api.yelp.com/v3";
 const ALLOWED_PATHS = [
@@ -7,9 +8,13 @@ const ALLOWED_PATHS = [
 ];
 
 export async function GET(req: NextRequest) {
+  // Admin-only: every proxied call spends Yelp API quota
+  if (!verifyAdminToken(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const apiKey = process.env.YELP_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: "YELP_API_KEY not configured" }, { status: 500 });
+    return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
   }
 
   const { searchParams } = req.nextUrl;

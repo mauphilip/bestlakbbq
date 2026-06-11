@@ -62,7 +62,7 @@ export default function AdminSearchPanel({ token, onAdded }: Props) {
         location: location.trim() || "Los Angeles, CA",
         limit: "10",
       });
-      const res = await fetch(`/api/yelp?${params}`);
+      const res = await fetch(`/api/yelp?${params}`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       setResults(data.businesses ?? []);
     } catch {

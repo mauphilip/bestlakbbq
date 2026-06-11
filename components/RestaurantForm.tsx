@@ -71,7 +71,7 @@ export default function RestaurantForm({ initial, token, onClose, onSaved, onDel
         categories: "koreanbbq",
         limit: "6",
       });
-      const res = await fetch(`/api/yelp?${params}`);
+      const res = await fetch(`/api/yelp?${params}`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       setFindResults((data.businesses ?? []) as YelpBizLite[]);
     } catch {
@@ -101,7 +101,7 @@ export default function RestaurantForm({ initial, token, onClose, onSaved, onDel
     if (!slug) { setFindError("Paste a valid yelp.com/biz/… URL first."); return; }
     setFinding(true); setFindError("");
     try {
-      const res = await fetch(`/api/yelp?path=${encodeURIComponent("/businesses/" + slug)}`);
+      const res = await fetch(`/api/yelp?path=${encodeURIComponent("/businesses/" + slug)}`, { headers: { Authorization: `Bearer ${token}` } });
       const biz = await res.json();
       if (biz?.id) applyBiz(biz as YelpBizLite);
       else setFindError("Couldn't fetch that Yelp page (it may be rate-limited — try again shortly).");

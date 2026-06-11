@@ -6,7 +6,8 @@ import type { Restaurant, Visit } from "@/lib/types";
 interface Props {
   restaurant: Restaurant;
   visit: Visit;
-  onEdit: () => void;
+  /** Omit to render read-only (visitor isn't logged in as the owner). */
+  onEdit?: () => void;
 }
 
 export default function VisitCard({ restaurant, visit, onEdit }: Props) {
@@ -37,12 +38,14 @@ export default function VisitCard({ restaurant, visit, onEdit }: Props) {
               <ExternalLink className="w-4 h-4" />
             </a>
           )}
-          <button
-            onClick={onEdit}
-            className="text-xs text-muted-foreground hover:text-foreground border border-border rounded px-2 py-0.5 transition-colors"
-          >
-            Edit
-          </button>
+          {onEdit && (
+            <button
+              onClick={onEdit}
+              className="text-xs text-muted-foreground hover:text-foreground border border-border rounded px-2 py-0.5 transition-colors"
+            >
+              Edit
+            </button>
+          )}
         </div>
       </div>
 

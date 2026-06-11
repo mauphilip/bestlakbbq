@@ -18,9 +18,16 @@ export default function VisitModal({ restaurant, existing, onClose, onSaved }: P
   const [visitDate, setVisitDate] = useState(existing?.visitDate ?? new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState(existing?.notes ?? "");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  function authHeader(): Record<string, string> {
+    const token = typeof window !== "undefined" ? sessionStorage.getItem("admin_token") ?? "" : "";
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
 
   async function save() {
     setSaving(true);
+    setError("");
     const visit: Visit = {
       restaurantId: restaurant.id,
       visited: true,
@@ -29,18 +36,27 @@ export default function VisitModal({ restaurant, existing, onClose, onSaved }: P
       wouldGoBack,
       notes: notes.trim() || undefined,
     };
-    await fetch("/api/visits", {
+    const res = await fetch("/api/visits", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify(visit),
     });
     setSaving(false);
+    if (!res.ok) {
+      setError(res.status === 401 ? "Not logged in — open the admin page and enter your PIN first." : "Failed to save.");
+      return;
+    }
     onSaved(visit);
     onClose();
   }
 
   async function remove() {
-    await fetch(`/api/visits/${restaurant.id}`, { method: "DELETE" });
+    setError("");
+    const res = await fetch(`/api/visits/${restaurant.id}`, { method: "DELETE", headers: authHeader() });
+    if (!res.ok) {
+      setError(res.status === 401 ? "Not logged in — open the admin page and enter your PIN first." : "Failed to delete.");
+      return;
+    }
     onSaved({ restaurantId: restaurant.id, visited: false });
     onClose();
   }
@@ -139,6 +155,7 @@ export default function VisitModal({ restaurant, existing, onClose, onSaved }: P
         </div>
 
         {/* Footer */}
+        {error && <p className="text-xs text-red-400 px-5 pb-2">{error}</p>}
         <div className="flex items-center gap-2 p-5 pt-0">
           {existing?.visited && (
             <button
