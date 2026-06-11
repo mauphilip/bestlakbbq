@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminToken } from "@/lib/auth";
-import { redis, KV_RESTAURANT_PREFIX } from "@/lib/kv";
+import { redis, setKVRestaurants } from "@/lib/kv";
 import { candidateToRestaurant } from "@/lib/yelp-shared";
 import { sanitizeRestaurant } from "@/lib/validate";
 import type { Restaurant } from "@/lib/types";
@@ -49,11 +49,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (imported.length) {
-      const pipeline = redis.pipeline();
-      for (const r of imported) {
-        pipeline.set(`${KV_RESTAURANT_PREFIX}${r.id}`, r);
-      }
-      await pipeline.exec();
+      // One HSET round trip for the whole batch
+      await setKVRestaurants(Object.fromEntries(imported.map((r) => [r.id, r as unknown as Record<string, unknown>])));
 
       // Mark imported candidates as tracked so re-opens of the panel reflect reality
       const importedIds = new Set(imported.map((r) => r.yelp_id));

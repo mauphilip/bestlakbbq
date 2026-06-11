@@ -212,7 +212,10 @@ export async function GET(req: NextRequest) {
     };
 
     try {
-      // 30-day TTL so a multi-day sweep (rate-limit pauses) never loses progress
+      // 30-day TTL so a multi-day sweep (rate-limit pauses) never loses progress.
+      // Upstash caps a request at ~1 MB — log the payload size so growth is visible.
+      const kb = Math.round(JSON.stringify(newCache).length / 1024);
+      console.log(`[yelp-discover] saving cache: ${merged.length} candidates, ~${kb} KB`);
       await redis.set(CACHE_KEY, newCache, { ex: 60 * 60 * 24 * 30 });
     } catch { /* non-fatal */ }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, KV_RESTAURANT_PREFIX, getKVRestaurants } from "@/lib/kv";
+import { getKVRestaurants, setKVRestaurant } from "@/lib/kv";
 import { verifyAdminToken } from "@/lib/auth";
 import { getYelpId, KBBQ_CATEGORY } from "@/lib/yelp-shared";
 import { yelpFetch, yelpSearch } from "@/lib/yelp-server";
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
         updates.yelp_id = yelp.id;
       }
 
-      await redis.set(`${KV_RESTAURANT_PREFIX}${base.id}`, updates);
+      await setKVRestaurant(base.id, updates as Record<string, unknown>);
       results.push({
         id: base.id,
         name: base.name,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminToken } from "@/lib/auth";
-import { getKVRestaurants, redis, KV_RESTAURANT_PREFIX } from "@/lib/kv";
+import { getKVRestaurants, getKVRestaurant, setKVRestaurant } from "@/lib/kv";
 import { getYelpId, KBBQ_CATEGORY, type YelpBizLite } from "@/lib/yelp-shared";
 import { yelpSearch, hasYelpKey } from "@/lib/yelp-server";
 import baseRestaurants from "@/data/restaurants.json";
@@ -61,9 +61,8 @@ export async function POST(req: NextRequest) {
     try { kv = await getKVRestaurants() as unknown as Restaurant[]; } catch { /* ignore */ }
     const existing = [...base, ...kv].find((r) => r.id === body.id);
     if (!existing) return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
-    const key = `${KV_RESTAURANT_PREFIX}${body.id}`;
-    const current = await redis.get<Record<string, unknown>>(key) ?? {};
-    await redis.set(key, {
+    const current = await getKVRestaurant(body.id) ?? {};
+    await setKVRestaurant(body.id, {
       ...existing, ...current,
       id: body.id,
       yelp_id: body.yelp_id,

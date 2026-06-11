@@ -246,7 +246,8 @@ export default function AdminPage() {
   async function loadRestaurants() {
     setLoading(true);
     try {
-      const res = await fetch("/api/restaurants");
+      // ?fresh busts the CDN cache so admin always sees post-edit data
+      const res = await fetch(`/api/restaurants?fresh=${Date.now()}`, { cache: "no-store" });
       const data = await res.json();
       setRestaurants(Array.isArray(data) ? data : []);
     } catch {

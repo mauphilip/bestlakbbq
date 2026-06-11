@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, KV_RESTAURANT_PREFIX, getKVRestaurants } from "@/lib/kv";
+import { getKVRestaurants, setKVRestaurant } from "@/lib/kv";
 import { verifyAdminToken } from "@/lib/auth";
 import { sanitizeRestaurant } from "@/lib/validate";
 import baseRestaurants from "@/data/restaurants.json";
@@ -31,7 +31,10 @@ export async function GET() {
   const kvOnly = kvRestaurants.filter((r) => !baseIds.has(r.id));
 
   const all = [...base, ...baseWithKvDefaults, ...kvOnly].filter((r) => !r.is_deleted);
-  return NextResponse.json(all);
+  const res = NextResponse.json(all);
+  // CDN-cache the public list; admin fetches bust with a ?fresh= timestamp param
+  res.headers.set("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
+  return res;
 }
 
 // POST /api/restaurants — add new OR override existing restaurant in KV (admin only)
@@ -48,7 +51,6 @@ export async function POST(req: NextRequest) {
   if (!r.name) {
     return NextResponse.json({ error: "id and name required" }, { status: 400 });
   }
-  const key = `${KV_RESTAURANT_PREFIX}${r.id}`;
-  await redis.set(key, { ...r, kv_managed: true, added_at: r.added_at ?? new Date().toISOString() });
+  await setKVRestaurant(r.id, { ...r, kv_managed: true, added_at: r.added_at ?? new Date().toISOString() });
   return NextResponse.json({ ok: true, id: r.id });
 }
