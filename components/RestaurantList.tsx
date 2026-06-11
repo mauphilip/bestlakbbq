@@ -2,10 +2,26 @@
 
 import { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
-import type { Restaurant } from "@/lib/types";
+import type { Restaurant, PriceTier } from "@/lib/types";
+import { KBBQ_PRICE_RANGES } from "@/lib/types";
 import { ExternalLink, ArrowUpDown, Globe, AlertTriangle, ChevronDown, ChevronUp, Star } from "lucide-react";
 
 type SortKey = "cost" | "rating" | "value" | "reviews";
+
+const RATING_OPTIONS = [0, 3.5, 4, 4.5] as const;
+const REVIEW_OPTIONS = [0, 100, 500, 1000] as const;
+const PRICE_TIERS = Object.keys(KBBQ_PRICE_RANGES) as PriceTier[];
+
+/** Effective price tier: Yelp's when present, else bucketed from the known cost. */
+function getPriceTier(r: Restaurant): PriceTier | null {
+  if (r.price_tier) return r.price_tier;
+  const cost = getMinCost(r);
+  if (!cost) return null;
+  if (cost < KBBQ_PRICE_RANGES["$$"].low) return "$";
+  if (cost < KBBQ_PRICE_RANGES["$$$"].low) return "$$";
+  if (cost < KBBQ_PRICE_RANGES["$$$$"].low) return "$$$";
+  return "$$$$";
+}
 
 function getMinCost(r: Restaurant): number {
   if (r.ayce && r.ayce_tiers.length) return Math.min(...r.ayce_tiers.map((t) => t.price));
@@ -33,6 +49,9 @@ interface Props {
 export default function RestaurantList({ restaurants, risky = [], minRating }: Props) {
   const [filter, setFilter] = useState<"all" | "ayce" | "non-ayce">("all");
   const [neighborhood, setNeighborhood] = useState("All");
+  const [minRatingFilter, setMinRatingFilter] = useState(0);
+  const [minReviewsFilter, setMinReviewsFilter] = useState(0);
+  const [tierFilter, setTierFilter] = useState<Set<PriceTier>>(new Set());
   const [sort, setSort] = useState<SortKey>("value");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [riskyOpen, setRiskyOpen] = useState(false);
@@ -52,6 +71,12 @@ export default function RestaurantList({ restaurants, risky = [], minRating }: P
     if (filter === "ayce" && !r.ayce) return false;
     if (filter === "non-ayce" && r.ayce) return false;
     if (neighborhood !== "All" && r.neighborhood !== neighborhood) return false;
+    if (minRatingFilter > 0 && r.yelp_rating < minRatingFilter) return false;
+    if (minReviewsFilter > 0 && r.review_count < minReviewsFilter) return false;
+    if (tierFilter.size > 0) {
+      const tier = getPriceTier(r);
+      if (!tier || !tierFilter.has(tier)) return false;
+    }
     return true;
   });
 
@@ -66,11 +91,11 @@ export default function RestaurantList({ restaurants, risky = [], minRating }: P
 
   const sorted = useMemo(() => applySort(applyFilters(restaurants)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [restaurants, filter, neighborhood, sort, sortDir]);
+    [restaurants, filter, neighborhood, minRatingFilter, minReviewsFilter, tierFilter, sort, sortDir]);
 
   const sortedRisky = useMemo(() => applySort(applyFilters(risky)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [risky, filter, neighborhood, sort, sortDir]);
+    [risky, filter, neighborhood, minRatingFilter, minReviewsFilter, tierFilter, sort, sortDir]);
 
   const maxReviews = useMemo(
     () => Math.max(1, ...restaurants.map((r) => r.review_count)),
@@ -123,6 +148,45 @@ export default function RestaurantList({ restaurants, risky = [], minRating }: P
             <option key={n} value={n}>{n === "All" ? "All Neighborhoods" : n}</option>
           ))}
         </select>
+        <select
+          value={minRatingFilter}
+          onChange={(e) => setMinRatingFilter(Number(e.target.value))}
+          className="text-sm bg-card border border-border rounded-lg px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-auto"
+        >
+          {RATING_OPTIONS.map((v) => (
+            <option key={v} value={v}>{v === 0 ? "Any rating" : `★ ${v.toFixed(1)}+`}</option>
+          ))}
+        </select>
+        <select
+          value={minReviewsFilter}
+          onChange={(e) => setMinReviewsFilter(Number(e.target.value))}
+          className="text-sm bg-card border border-border rounded-lg px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-auto"
+        >
+          {REVIEW_OPTIONS.map((v) => (
+            <option key={v} value={v}>{v === 0 ? "Any reviews" : `${v.toLocaleString()}+ reviews`}</option>
+          ))}
+        </select>
+        <div className="flex gap-1">
+          {PRICE_TIERS.map((tier) => {
+            const active = tierFilter.has(tier);
+            return (
+              <button
+                key={tier}
+                onClick={() => setTierFilter((prev) => {
+                  const next = new Set(prev);
+                  if (active) next.delete(tier); else next.add(tier);
+                  return next;
+                })}
+                title={KBBQ_PRICE_RANGES[tier].label + "/pp"}
+                className={`px-2.5 py-2 rounded-lg border text-sm transition-colors ${
+                  active ? "bg-primary/15 border-primary/40 text-primary font-medium" : "border-border text-muted-foreground hover:border-foreground/20"
+                }`}
+              >
+                {tier}
+              </button>
+            );
+          })}
+        </div>
         <span className="text-xs text-muted-foreground ml-auto">{sorted.length} restaurants</span>
       </div>
 
