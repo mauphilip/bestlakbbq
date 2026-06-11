@@ -41,6 +41,14 @@ export interface Restaurant {
   kv_managed?: boolean;
   /** Soft-delete flag — base JSON restaurants get a KV override with this set */
   is_deleted?: boolean;
+  /** Where the record came from. Bulk Yelp imports are "yelp_discover". */
+  source?: "base" | "yelp_discover" | "manual";
+  /** ISO timestamp when the record was first added */
+  added_at?: string;
+  /** True until AYCE status / pricing has been manually triaged after import */
+  needs_review?: boolean;
+  /** Personal favorite — always stays on the main list regardless of thresholds */
+  featured?: boolean;
 }
 
 export interface Visit {

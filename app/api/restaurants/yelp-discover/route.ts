@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminToken } from "@/lib/auth";
 import { getKVRestaurants, redis } from "@/lib/kv";
 import { KBBQ_CATEGORY, slugFromUrl, bizToCandidate as sharedBizToCandidate, type YelpBizLite } from "@/lib/yelp-shared";
-import { yelpSearch } from "@/lib/yelp-server";
+import { yelpSearch, YelpRateLimitError } from "@/lib/yelp-server";
+import { SEED_LOCATIONS } from "@/lib/discover-locations";
 import baseRestaurants from "@/data/restaurants.json";
 import type { Restaurant } from "@/lib/types";
 import type { DiscoverCandidate, DiscoverCache } from "@/lib/yelp-types";
@@ -53,26 +54,31 @@ function cityToNeighborhood(city: string, zip?: string, zipMap: Record<string, s
   return map[city] ?? city;
 }
 
-const LOCATIONS = [
-  "Koreatown, Los Angeles, CA",
-  "Los Angeles, CA",
-  "Gardena, CA",
-  "Torrance, CA",
-  "Rowland Heights, CA",
-  "Irvine, CA",
-  "Cerritos, CA",
-  "Buena Park, CA",
-];
+const LOCATIONS = SEED_LOCATIONS.map((l) => l.key);
 
 async function runDiscovery(known: ReturnType<typeof buildKnownSet>, zipMap: Record<string, string> = DEFAULT_ZIP_MAP, locations: string[] = LOCATIONS) {
   const seen = new Set<string>();
   const candidates: DiscoverCandidate[] = [];
   const errors: string[] = [];
+  const scannedLocations: string[] = [];
+  let rateLimited = false;
 
-  for (const location of locations) {
+  outer: for (const location of locations) {
     // Paginate up to 200 results per location (Yelp max with offset)
     for (let offset = 0; offset < 200; offset += 50) {
-      const page = await yelpSearch({ categories: KBBQ_CATEGORY, location, offset: String(offset), sort_by: "review_count" });
+      let page: Awaited<ReturnType<typeof yelpSearch>>;
+      try {
+        page = await yelpSearch({ categories: KBBQ_CATEGORY, location, offset: String(offset), sort_by: "review_count" });
+      } catch (e) {
+        // 429 — keep everything scanned so far; the caller saves partial results
+        // to the cache and the UI tells the user which locations remain.
+        if (e instanceof YelpRateLimitError) {
+          rateLimited = true;
+          errors.push(`${location}: Yelp rate limit reached${e.resetTime ? ` (resets ${e.resetTime})` : ""}`);
+          break outer;
+        }
+        throw e;
+      }
 
       if (page.error) {
         errors.push(`${location} (offset ${offset}): ${page.error}`);
@@ -90,9 +96,10 @@ async function runDiscovery(known: ReturnType<typeof buildKnownSet>, zipMap: Rec
       if (offset + 50 >= Math.min(page.total, 200)) break;
       await new Promise((r) => setTimeout(r, 150));
     }
+    scannedLocations.push(location);
   }
 
-  return { candidates, totalScanned: seen.size, errors };
+  return { candidates, totalScanned: seen.size, errors, scannedLocations, rateLimited };
 }
 
 function bizToCandidate(biz: YelpBizLite, known: ReturnType<typeof buildKnownSet>, zipMap: Record<string, string> = DEFAULT_ZIP_MAP): DiscoverCandidate {
@@ -134,8 +141,11 @@ export async function GET(req: NextRequest) {
 
   const forceRefresh = req.nextUrl.searchParams.get("refresh") === "1";
   const locationParam = req.nextUrl.searchParams.get("locations");
-  const selectedLocations = forceRefresh && locationParam
-    ? LOCATIONS.filter((l) => locationParam.split(",").some((p) => l.toLowerCase().startsWith(p.toLowerCase().trim())))
+  // Exact-match batch keys so the client can drive chunked scans (5-ish locations per
+  // request) without tripping Vercel's function timeout on the full 27-location sweep.
+  const requested = (locationParam ?? "").split(",").map((p) => p.trim().toLowerCase()).filter(Boolean);
+  const selectedLocations = forceRefresh && requested.length
+    ? LOCATIONS.filter((l) => requested.includes(l.toLowerCase()))
     : LOCATIONS;
 
   try {
@@ -190,8 +200,9 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Full Yelp scan
-    const { candidates: fresh, totalScanned, errors } = await runDiscovery(known, zipMap, selectedLocations);
+    // Yelp scan over the selected batch
+    const { candidates: fresh, totalScanned, errors, scannedLocations, rateLimited } =
+      await runDiscovery(known, zipMap, selectedLocations);
     const merged = mergeWithCache(cache?.candidates ?? [], fresh);
 
     const newCache: DiscoverCache = {
@@ -201,7 +212,8 @@ export async function GET(req: NextRequest) {
     };
 
     try {
-      await redis.set(CACHE_KEY, newCache, { ex: 60 * 60 * 24 * 7 });
+      // 30-day TTL so a multi-day sweep (rate-limit pauses) never loses progress
+      await redis.set(CACHE_KEY, newCache, { ex: 60 * 60 * 24 * 30 });
     } catch { /* non-fatal */ }
 
     return NextResponse.json({
@@ -211,6 +223,8 @@ export async function GET(req: NextRequest) {
       errors: errors.length ? errors : undefined,
       fromCache: false,
       lastFetched: newCache.lastFetched,
+      scannedLocations,
+      rateLimited: rateLimited || undefined,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

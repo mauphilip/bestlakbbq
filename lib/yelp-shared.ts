@@ -1,7 +1,7 @@
 // Client-safe, PURE Yelp helpers — NO process.env, NO keyed fetch.
 // Safe to import from client components. Server-only Yelp calls live in lib/yelp-server.ts.
 
-import type { Restaurant, PriceTier } from "@/lib/types";
+import { KBBQ_PRICE_RANGES, type Restaurant, type PriceTier } from "@/lib/types";
 import type { DiscoverCandidate } from "@/lib/yelp-types";
 
 /** The single canonical Yelp category alias for KBBQ searches.
@@ -101,6 +101,49 @@ export function bizToCandidate(
     is_closed: biz.is_closed ?? false,
     kbbq_confidence: kbbqConfidence(biz),
     categories_raw: (biz.categories ?? []).map((c) => c.alias),
+  };
+}
+
+/** Midpoint of a Yelp price tier's KBBQ cost range — the "est." cost for untriaged imports. */
+export function priceTierMidpoint(tier?: string | null): number | null {
+  const range = KBBQ_PRICE_RANGES[tier as PriceTier];
+  return range ? Math.round((range.low + range.high) / 2) : null;
+}
+
+const VALID_TIERS: ReadonlySet<string> = new Set(Object.keys(KBBQ_PRICE_RANGES));
+
+/**
+ * Convert a DiscoverCandidate into a full Restaurant for import.
+ * Used by both DiscoverPanel and the bulk-import route so the mapping can't drift.
+ * AYCE status isn't knowable from Yelp — imports default to Non-AYCE with the
+ * price-tier midpoint as an estimated cost, flagged needs_review for admin triage.
+ */
+export function candidateToRestaurant(c: DiscoverCandidate, nowIso?: string): Restaurant {
+  const now = nowIso ?? new Date().toISOString();
+  const tier = c.price_tier && VALID_TIERS.has(c.price_tier) ? (c.price_tier as PriceTier) : undefined;
+  return {
+    id: c.id || c.yelp_id,
+    name: c.name ?? "",
+    neighborhood: c.neighborhood ?? "Unknown",
+    ayce: false,
+    ayce_tiers: [],
+    non_ayce_est_per_person: priceTierMidpoint(tier),
+    price_tier: tier,
+    price_verified: false,
+    yelp_id: c.yelp_id,
+    yelp_rating: c.yelp_rating ?? 0,
+    google_rating: 0,
+    review_count: c.review_count ?? 0,
+    lat: c.lat ?? 34.05,
+    lng: c.lng ?? -118.3,
+    yelp_url: c.yelp_url ?? "",
+    notes: "",
+    last_price_check: now.slice(0, 10),
+    last_yelp_sync: now,
+    kv_managed: true,
+    source: "yelp_discover",
+    added_at: now,
+    needs_review: true,
   };
 }
 
