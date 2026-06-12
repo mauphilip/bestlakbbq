@@ -24,6 +24,32 @@ export const DEFAULT_ZIP_MAP: Record<string, string> = {
   "90701": "Cerritos", "90703": "Cerritos",
   "92833": "Fullerton", "92835": "Fullerton",
   "92868": "Orange County", "92865": "Orange County",
+  // LA core (expanded discover coverage)
+  "90012": "DTLA", "90013": "DTLA", "90014": "DTLA",
+  "90015": "DTLA", "90017": "DTLA", "90021": "DTLA",
+  "90028": "Hollywood", "90038": "Hollywood", "90046": "Hollywood",
+  // Valley
+  "91501": "Burbank", "91502": "Burbank", "91504": "Burbank",
+  "91505": "Burbank", "91506": "Burbank",
+  "91324": "Northridge", "91325": "Northridge", "91343": "Northridge",
+  // South Bay / Gateway
+  "90802": "Long Beach", "90804": "Long Beach", "90806": "Long Beach",
+  "90807": "Long Beach", "90813": "Long Beach", "90815": "Long Beach",
+  "90240": "Downey", "90241": "Downey", "90242": "Downey",
+  // SGV
+  "91775": "San Gabriel", "91776": "San Gabriel",
+  "91745": "Hacienda Heights",
+  "91790": "West Covina", "91791": "West Covina", "91792": "West Covina",
+  "91765": "Diamond Bar",
+  // OC
+  "92831": "Fullerton", "92832": "Fullerton",
+  "92805": "Anaheim", "92806": "Anaheim",
+  "92840": "Garden Grove", "92841": "Garden Grove", "92843": "Garden Grove",
+  "92844": "Garden Grove", "92845": "Garden Grove",
+  "92701": "Santa Ana", "92703": "Santa Ana", "92705": "Santa Ana",
+  "92707": "Santa Ana",
+  "92780": "Tustin", "92782": "Tustin",
+  "92602": "Irvine", "92606": "Irvine", "92610": "Irvine",
 };
 
 /** Full zip→neighborhood map: the saved KV map if present, else the seed. Non-fatal. */

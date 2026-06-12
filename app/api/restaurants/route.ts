@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, KV_RESTAURANT_PREFIX, getKVRestaurants } from "@/lib/kv";
+import { getKVRestaurants, setKVRestaurant } from "@/lib/kv";
 import { verifyAdminToken } from "@/lib/auth";
+import { sanitizeRestaurant } from "@/lib/validate";
 import baseRestaurants from "@/data/restaurants.json";
 import type { Restaurant } from "@/lib/types";
 
@@ -30,7 +31,10 @@ export async function GET() {
   const kvOnly = kvRestaurants.filter((r) => !baseIds.has(r.id));
 
   const all = [...base, ...baseWithKvDefaults, ...kvOnly].filter((r) => !r.is_deleted);
-  return NextResponse.json(all);
+  const res = NextResponse.json(all);
+  // CDN-cache the public list; admin fetches bust with a ?fresh= timestamp param
+  res.headers.set("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
+  return res;
 }
 
 // POST /api/restaurants — add new OR override existing restaurant in KV (admin only)
@@ -38,11 +42,15 @@ export async function POST(req: NextRequest) {
   if (!verifyAdminToken(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const body = await req.json();
-  if (!body.id || !body.name) {
+  const body = await req.json().catch(() => null);
+  const sanitized = sanitizeRestaurant(body);
+  if (!sanitized.ok) {
+    return NextResponse.json({ error: sanitized.error }, { status: 400 });
+  }
+  const r = sanitized.value;
+  if (!r.name) {
     return NextResponse.json({ error: "id and name required" }, { status: 400 });
   }
-  const key = `${KV_RESTAURANT_PREFIX}${body.id}`;
-  await redis.set(key, { ...body, kv_managed: true, added_at: body.added_at ?? new Date().toISOString() });
-  return NextResponse.json({ ok: true, id: body.id });
+  await setKVRestaurant(r.id, { ...r, kv_managed: true, added_at: r.added_at ?? new Date().toISOString() });
+  return NextResponse.json({ ok: true, id: r.id });
 }

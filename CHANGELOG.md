@@ -6,6 +6,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow 
 ## [Unreleased]
 
 ### Added
+- **Full LA County + OC discovery sweep** — Yelp Discover now covers 27 seed locations grouped by region (LA Core, Valley, South Bay, Gateway, SGV, OC) instead of 8. A new **"Scan all regions"** button runs the sweep in region-sized batches with live progress; on a Yelp rate limit it stops, keeps everything scanned so far (cache TTL bumped 7→30 days), and shows a **Resume scan** for the remaining regions. The whole sweep costs ~50–70 API calls; importing costs zero.
+- **One-click bulk import** — "Import all N" imports every confirmed-KBBQ (high-confidence) discovery in a single request via the new `/api/restaurants/bulk-import` route; "likely KBBQ" (medium-confidence) candidates stay listed for manual selection. Imports default to Non-AYCE with the Yelp price-tier midpoint as an estimated cost and are flagged **needs review** for triage. Sub-3★ spots are no longer excluded from import — the quality threshold (below) handles them.
+- **Quality thresholds + "Go at your own risk" list** — admin → **Settings** has editable minimum Yelp rating (default 3.0) and minimum review count, with a live preview of which restaurants would be demoted. Spots below the bar move to a collapsed amber **"Go at your own risk (N)"** section at the bottom of the directory (sharing the same filters) and drop off the homepage chart — nothing is deleted. Mark a spot as a ⭐ **Favorite** in its edit form to keep it on the main list regardless (for when a personal favorite sits at 3.5★).
+- **Directory filters** — minimum rating (3.5+/4.0+/4.5+), minimum reviews (100/500/1000+), and $–$$$$ price-tier chips; the neighborhood dropdown is now derived from the data so newly imported areas appear automatically.
+- **Admin triage tools** — "Needs review (N)" filter chip in Manage, needs-review and ⭐ favorite badges on rows, and Favorite/Needs-review toggles in the edit form.
+
+### Changed
+- **Restaurant storage moved to a single Redis hash** — reads are one `HGETALL` instead of `KEYS` + `MGET` (faster and far fewer billed commands at 300+ restaurants). Existing per-key records migrate automatically on first read. Bulk imports land in one round trip. The public restaurants API is CDN-cached for 5 minutes (admin reads bypass it).
+
+### Security
+- **Admin tokens are now HMAC-signed with a 7-day expiry** — the old token was reversible base64 that contained the PIN. The PIN check and token check are timing-safe, the "0000" fallback is gone, and the login accepts a long passphrase (recommended: set one in Vercel env). You'll need to log in again once after deploying.
+- **Login rate limiting** — 5 wrong attempts per IP locks admin login for 15 minutes.
+- **Visit log locked down** — adding/editing/deleting visits now requires being logged in as admin (the /visited page hides edit controls otherwise). Previously anyone on the internet could write to it.
+- **Yelp proxy locked down** — `/api/yelp` (used by the admin form's Find-on-Yelp) now requires the admin token; it was previously an open endpoint anyone could use to burn the daily Yelp quota.
+- **Input validation everywhere** — restaurant and visit mutation bodies are whitelisted and type-checked (`lib/validate.ts`); ids are constrained since they become Redis keys.
+
+### Added
 - **Yelp Connector subtab** (Manage → Yelp Connector) — shows live connection status and remaining daily Yelp API quota (a colored bar, reset time, low-quota warning), so you can see where you stand before a big Sync/Discover.
 - **Editable neighborhood ↔ zip map** (Neighborhoods tab) — the whole zip→neighborhood map now lives in the database as one editable source of truth (replacing the hardcoded map + overrides). Two views (grouped by neighborhood, and a flat zip list), full CRUD, and multi-select bulk assign/delete (e.g. assign several zips to Koreatown at once). Yelp Discover classifies neighborhoods from this map.
 

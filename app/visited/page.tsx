@@ -9,6 +9,13 @@ export default function VisitedPage() {
   const [loading, setLoading] = useState(true);
   const [editTarget, setEditTarget] = useState<Restaurant | null>(null);
   const [allRestaurants, setAllRestaurants] = useState<Restaurant[]>([]);
+  const [canEdit, setCanEdit] = useState(false);
+
+  useEffect(() => {
+    // Visit mutations are owner-only — show edit affordances only when an admin
+    // token from /x/admin is present in this browser session.
+    setCanEdit(!!sessionStorage.getItem("admin_token"));
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -106,7 +113,7 @@ export default function VisitedPage() {
                 key={r.id}
                 restaurant={r}
                 visit={visits[r.id]}
-                onEdit={() => setEditTarget(r)}
+                onEdit={canEdit ? () => setEditTarget(r) : undefined}
               />
             ))}
           </div>
